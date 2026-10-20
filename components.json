@@ -1,0 +1,438 @@
+[
+ {
+  "name": "Host",
+  "type": "MISC",
+  "frozen": "ArchipelagoServer",
+  "desc": "Host a generated multiworld on your computer.",
+  "suffixes": [
+   ".archipelago",
+   ".zip"
+  ],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Generate",
+  "type": "MISC",
+  "frozen": "ArchipelagoGenerate",
+  "desc": "Generate a multiworld with the YAMLs in the players folder.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Options Creator",
+  "type": "TOOL",
+  "frozen": "ArchipelagoOptionsCreator",
+  "desc": "Visual creator for Archipelago option files.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Install APWorld",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Install an APWorld to play games not included with Archipelago by default.",
+  "suffixes": [
+   ".apworld"
+  ],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Text Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoTextClient",
+  "desc": "Connect to a multiworld using the text client.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Open host.yaml",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Open the host.yaml file to change settings for generation, games, and more.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Open Patch",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Open a patch file, downloaded from the room page or provided by the host.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Generate Template Options",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Generate template YAMLs for currently installed games.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Archipelago Website",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Open archipelago.gg in your browser.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Discord Server",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Join the Discord server to play public multiworlds, report issues, or just chat!",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Unrated/18+ Discord Server",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Find unrated and 18+ games in the After Dark Discord server.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Browse Files",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Open the Archipelago installation folder in your file browser.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "LttP Adjuster",
+  "type": "ADJUSTER",
+  "frozen": "ArchipelagoLttPAdjuster",
+  "desc": "",
+  "suffixes": [],
+  "game": "A Link to the Past",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "OoT Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoOoTClient",
+  "desc": "",
+  "suffixes": [
+   ".apz5"
+  ],
+  "game": "Ocarina of Time",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "OoT Adjuster",
+  "type": "ADJUSTER",
+  "frozen": "ArchipelagoOoTAdjuster",
+  "desc": "",
+  "suffixes": [],
+  "game": "Ocarina of Time",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Zelda 1 Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoZelda1Client",
+  "desc": "",
+  "suffixes": [
+   ".aptloz"
+  ],
+  "game": "The Legend of Zelda",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "ChecksFinder Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoChecksFinderClient",
+  "desc": "",
+  "suffixes": [],
+  "game": "ChecksFinder",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Zillion Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoZillionClient",
+  "desc": "",
+  "suffixes": [
+   ".apzl"
+  ],
+  "game": "Zillion",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "MMBN3 Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoMMBN3Client",
+  "desc": "",
+  "suffixes": [
+   ".apbn3"
+  ],
+  "game": "MegaMan Battle Network 3",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Export Datapackage",
+  "type": "TOOL",
+  "frozen": null,
+  "desc": "Write item/location data for installed worlds to a file and open it.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Build APWorlds",
+  "type": "MISC",
+  "frozen": null,
+  "desc": "Build APWorlds from loose-file world folders.",
+  "suffixes": [],
+  "game": null,
+  "uri": false,
+  "native": true
+ },
+ {
+  "name": "Adventure Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoAdventureClient",
+  "desc": "",
+  "suffixes": [
+   ".apadvn"
+  ],
+  "game": "Adventure",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "A Hat in Time Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoAHITClient",
+  "desc": "",
+  "suffixes": [],
+  "game": "A Hat in Time",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "SNI Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoSNIClient",
+  "desc": "A client for connecting to SNES consoles via Super Nintendo Interface.",
+  "suffixes": [
+   ".apsoe",
+   ".aplttp",
+   ".apz3",
+   ".apeb",
+   ".apkdl3",
+   ".apl2ac",
+   ".apsm",
+   ".apm3",
+   ".apsmw",
+   ".apsmz3",
+   ".apyi"
+  ],
+  "game": null,
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "APQuest Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "APQuest",
+  "uri": true,
+  "native": false
+ },
+ {
+  "name": "Civ6 Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [
+   ".apcivvi"
+  ],
+  "game": "Civilization VI",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "BizHawk Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoBizHawkClient",
+  "desc": "Open the BizHawk client, to play games using the Bizhawk emulator.",
+  "suffixes": [
+   ".apcv64",
+   ".apcvcotm",
+   ".apsml2",
+   ".apmlss",
+   ".apmm2",
+   ".apmm3",
+   ".apemerald",
+   ".apred",
+   ".apblue",
+   ".apygo06"
+  ],
+  "game": null,
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Factorio Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Factorio",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Gauntlet Legends Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [
+   ".apgl"
+  ],
+  "game": "Gauntlet Legends",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Jak and Daxter Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Jak and Daxter: The Precursor Legacy",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "KH1 Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Kingdom Hearts",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "KH2 Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Kingdom Hearts 2",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Links Awakening DX Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [
+   ".apladx"
+  ],
+  "game": "Links Awakening DX",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "The Messenger",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "Launch The Messenger.\nInstalls and checks for updates for the randomizer.",
+  "suffixes": [],
+  "game": "The Messenger",
+  "uri": true,
+  "native": false
+ },
+ {
+  "name": "Saving Princess Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Saving Princess",
+  "uri": true,
+  "native": false
+ },
+ {
+  "name": "Starcraft 2 Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Starcraft 2",
+  "uri": true,
+  "native": false
+ },
+ {
+  "name": "The Wind Waker Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [
+   ".aptww"
+  ],
+  "game": "The Wind Waker",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Undertale Client",
+  "type": "CLIENT",
+  "frozen": "ArchipelagoUndertaleClient",
+  "desc": "",
+  "suffixes": [],
+  "game": "Undertale",
+  "uri": false,
+  "native": false
+ },
+ {
+  "name": "Wargroove Client",
+  "type": "CLIENT",
+  "frozen": null,
+  "desc": "",
+  "suffixes": [],
+  "game": "Wargroove",
+  "uri": false,
+  "native": false
+ }
+]

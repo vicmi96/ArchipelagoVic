@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ws: wss:; img-src 'self' data: apvic-icon:">
+<title>ArchipelagoVic mini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="mini-page">
+<header class="mini-head">
+  <span class="mini-title">ArchipelagoVic</span>
+  <button class="mini-btn" type="button" id="miniOpen" title="Show the main window">Open</button>
+  <button class="mini-btn" type="button" id="miniClose" title="Close the mini window" aria-label="Close">✕</button>
+</header>
+<section class="mini-rooms" id="miniRooms"></section>
+<ol class="mini-items" id="miniItems"></ol>
+<p class="mini-empty hidden" id="miniEmpty">Join a room in ArchipelagoVic to see your items here.</p>
+<div class="toast hidden" id="toast" role="status"></div>
+<script src="client.js"></script>
+<script src="mini.js"></script>
+</body>
+</html>

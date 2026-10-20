@@ -1,0 +1,12 @@
+# Installer, portable exe and unpacked app made by "Build installer.cmd" (each over 100 MB).
+# Build them again any time; attach the Setup .exe to a GitHub Release instead of committing it.
+dist/
+
+# Downloaded by "npm install" / "Start ArchipelagoVic.cmd" (Electron alone is about 250 MB).
+node_modules/
+
+# Windows / macOS / editor clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+*.log

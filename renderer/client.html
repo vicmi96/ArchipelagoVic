@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ws: wss:; img-src 'self' data: apvic-icon:">
+<title>Archipelago Client</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="client-page">
+<!-- ================= Connect ================= -->
+<section id="connectView">
+  <div class="connect-card">
+    <div class="brand">
+      <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="21" fill="var(--sea-soft)"/>
+        <path d="M8 27c3 0 3-2 6-2s3 2 6 2 3-2 6-2 3 2 6 2 3-2 6-2" fill="none" stroke="var(--sea)" stroke-width="2" stroke-linecap="round"/>
+        <path d="M13 23l4-8 3 5 2-3 5 6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="30" cy="14" r="2.5" fill="var(--brass)"/>
+      </svg>
+      <div>
+        <h1>Archipelago Client</h1>
+        <p>Follow every item between worlds, live.</p>
+      </div>
+    </div>
+    <form class="connect-form" id="connectForm" autocomplete="on">
+      <div class="field">
+        <label for="fServer">Server address</label>
+        <input class="input" id="fServer" name="server" placeholder="archipelago.gg:38281, or paste the room link" required>
+      </div>
+      <div class="field room-field">
+        <label for="fRoom">Room page <span class="muted">(optional, shows everyone's progress)</span></label>
+        <input class="input" id="fRoom" name="room" placeholder="https://archipelago.gg/room/…">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="fSlot">Slot name</label>
+          <input class="input" id="fSlot" name="slot" placeholder="Your player name" required>
+        </div>
+        <div class="field">
+          <label for="fPass">Password</label>
+          <input class="input" id="fPass" name="password" type="password" placeholder="If the room has one">
+        </div>
+      </div>
+      <div class="connect-error" id="connectError" role="alert"></div>
+      <button class="btn primary" id="connectBtn" type="submit">Connect</button>
+    </form>
+    <div class="recent hidden" id="recentWrap">
+      <h2>Recent rooms</h2>
+      <ul id="recentList"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= App ================= -->
+<section id="appView" class="hidden">
+  <header class="top">
+    <div class="who">
+      <span class="status-dot" id="connDot" title="Connection"></span>
+      <span id="meIcon"></span>
+      <div style="min-width:0">
+        <div class="name" id="meName">—</div>
+        <div class="game" id="meGame">—</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <b id="statChecks">0 / 0</b>
+        <span>Checks done</span>
+        <div class="meter"><i id="statMeter"></i></div>
+      </div>
+      <div class="stat" title="Includes your own items that you found in your own world."><b id="statReceived">0</b><span id="statReceivedLbl">Items received</span></div>
+      <button type="button" class="stat stat-btn" id="waitingStat" title="Key items that hints say are still waiting in other worlds. Click to see where."><b id="statWaiting">0</b><span>Key items still out there</span></button>
+      <div class="stat"><b id="statHints">0</b><span id="statHintsLbl">Hint points</span></div>
+      <div class="stat hide-sm hide-md"><b id="statRoom">—</b><span>Room</span></div>
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost small" type="button" id="recapBtn" title="Your game so far: checks over time, who sent you the most">Recap</button>
+      <button class="btn ghost small" type="button" id="alertsBtn" title="Sounds and desktop notifications">Alerts</button>
+      <button class="btn ghost small" type="button" data-guide>Colors</button>
+      <button class="btn ghost small in-browser" id="themeBtn" title="Switch light / dark theme">Theme</button>
+      <button class="btn ghost small" id="disconnectBtn">Disconnect</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="activity" aria-selected="true">Activity <span class="count hidden" id="cntActivity"></span></button>
+    <button role="tab" data-tab="received" aria-selected="false">Received <span class="count" id="cntReceived">0</span></button>
+    <button role="tab" data-tab="checks" aria-selected="false">Checks left <span class="count" id="cntChecks">0</span></button>
+    <button role="tab" data-tab="hints" aria-selected="false">Hints <span class="count" id="cntHints">0</span></button>
+    <button role="tab" data-tab="players" aria-selected="false">Players <span class="count" id="cntPlayers">0</span></button>
+  </nav>
+
+  <main>
+    <!-- Activity -->
+    <div class="panel" data-panel="activity">
+      <div class="activity">
+        <div class="panel">
+          <div class="toolbar">
+            <div class="seg" id="feedFilter" role="group" aria-label="Show">
+              <button data-f="all" aria-pressed="true">All</button>
+              <button data-f="mine" aria-pressed="false">Involving me</button>
+              <button data-f="items" aria-pressed="false">Items</button>
+              <button data-f="hints" aria-pressed="false">Hints</button>
+              <button data-f="chat" aria-pressed="false">Chat</button>
+            </div>
+            <label class="check"><input type="checkbox" id="progOnly"> Key items only</label>
+            <input class="input search" id="feedSearch" type="search" placeholder="Search items, places, players">
+            <span class="spacer"></span>
+            <button type="button" class="legend legend-btn toolbar-legend hide-sm" data-guide title="What do the colors mean?">
+              <span title="Unlocks progress for someone"><i class="g prog">★</i>Key item</span>
+              <span title="Helps, not required"><i class="g useful">▲</i>Useful</span>
+              <span title="Bad effect"><i class="g trap">✖</i>Trap</span>
+              <span title="Nice to have"><i class="g filler">●</i>Filler</span>
+              <span class="q" aria-label="What do the colors mean?">?</span>
+            </button>
+          </div>
+          <div class="scroll" id="feedScroll">
+            <ol class="feed" id="feed"></ol>
+            <div class="empty hidden" id="feedEmpty"><b>Nothing here yet</b>Item sends, hints and chat show up as they happen.</div>
+            <button class="btn jump hidden" id="jumpBtn">Jump to latest</button>
+          </div>
+        </div>
+        <aside class="roster">
+          <h3>Item colors</h3>
+          <button type="button" class="key-list" data-guide title="Open the color guide">
+            <span><i class="g prog">★</i><b>Key item</b> someone needs it to progress</span>
+            <span><i class="g useful">▲</i><b>Useful</b> helps, not required</span>
+            <span><i class="g trap">✖</i><b>Trap</b> bad for whoever gets it</span>
+            <span><i class="g filler">●</i><b>Filler</b> nice to have</span>
+            <span class="more">What else do colors mean?</span>
+          </button>
+          <h3>Filter by player</h3>
+          <ul class="roster-list" id="roster"></ul>
+          <p class="roster-note">Select a player to see only what they sent or received.</p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Received -->
+    <div class="panel hidden" data-panel="received">
+      <div class="toolbar">
+        <div class="seg" id="recvMode" role="group" aria-label="View">
+          <button data-m="grouped" aria-pressed="true">Grouped by item</button>
+          <button data-m="log" aria-pressed="false">In order received</button>
+        </div>
+        <select class="input select-sm" id="recvFrom" aria-label="Where items came from">
+          <option value="all">From anyone</option>
+          <option value="others">Sent by other players</option>
+          <option value="self">Found in my own world</option>
+        </select>
+        <label class="check"><input type="checkbox" id="recvProg"> Key items only</label>
+        <label class="check"><input type="checkbox" id="recvCat"> Group by category</label>
+        <input class="input search" id="recvSearch" type="search" placeholder="Search items or senders">
+      </div>
+      <div class="scroll" id="recvBody"></div>
+    </div>
+
+    <!-- Checks left -->
+    <div class="panel hidden" data-panel="checks">
+      <div class="scroll">
+        <div class="progress-block">
+          <div class="big-meter">
+            <div class="lbl"><span id="chkLbl">0 of 0 checks done</span><span id="chkPct">0%</span></div>
+            <div class="bar"><i id="chkBar" style="width:0"></i></div>
+          </div>
+          <div class="seg" id="chkMode" role="group" aria-label="Show">
+            <button data-m="missing" aria-pressed="true">Remaining</button>
+            <button data-m="checked" aria-pressed="false">Done</button>
+          </div>
+          <input class="input search" id="chkSearch" type="search" placeholder="Search locations" style="max-width:240px">
+          <label class="check"><input type="checkbox" id="chkCat"> Group by area</label>
+        </div>
+        <div class="spoiler" id="scoutBar">
+          <span style="flex:1;min-width:220px">Want to see which item sits behind each remaining check and who it's for? This reveals the contents of your own world.</span>
+          <button class="btn" id="scoutBtn">Reveal contents</button>
+        </div>
+        <div id="chkBody"></div>
+      </div>
+    </div>
+
+    <!-- Hints -->
+    <div class="panel hidden" data-panel="hints">
+      <div class="toolbar">
+        <label class="check"><input type="checkbox" id="hintHideFound" checked> Hide found</label>
+        <input class="input search" id="hintSearch" type="search" placeholder="Search hints">
+        <span class="spacer"></span>
+        <span class="muted" style="font-size:13px" id="hintCostLbl"></span>
+      </div>
+      <div class="scroll" id="hintBody"></div>
+    </div>
+
+    <!-- Players -->
+    <div class="panel hidden" data-panel="players">
+      <div class="scroll" id="playersBody"></div>
+    </div>
+  </main>
+
+  <footer class="composer">
+    <ul class="suggest hidden" id="suggest" role="listbox"></ul>
+    <div class="cmdbar" id="cmdbar" role="group" aria-label="Quick commands">
+      <button type="button" class="btn small" data-cmd="hint" title="Ask the server where one of your items is. Costs hint points.">Ask for a hint…</button>
+      <button type="button" class="btn small" data-cmd="remaining" title="List items still in your world that nobody has found">Items left in my world</button>
+      <button type="button" class="btn small" data-cmd="status" title="Show everyone's progress">Everyone's progress</button>
+      <span class="cmd-sep"></span>
+      <button type="button" class="btn small" data-cmd="collect" title="Receive all your remaining items from other worlds">Collect</button>
+      <button type="button" class="btn small" data-cmd="release" title="Send everything left in your world to its owners">Release</button>
+    </div>
+    <form id="sayForm">
+      <input class="input" id="sayInput" autocomplete="off" placeholder="Chat, or type a command like !hint Hookshot" aria-label="Message or command">
+      <button class="btn primary" type="submit">Send</button>
+    </form>
+    <div class="hintline"><kbd>Tab</kbd> completes item and location names after <b>!hint</b> or <b>!hint_location</b>. <kbd>↑</kbd> recalls earlier lines. Try <b>!help</b>.</div>
+  </footer>
+</section>
+
+<dialog id="guide" aria-labelledby="guideTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="guideTitle">Reading the colors</h2><button class="btn ghost" value="close" aria-label="Close">✕</button></div>
+    <h3>Items are colored by how important they are</h3>
+    <ul class="guide-list">
+      <li><span class="item prog"><i class="g">★</i>Hookshot</span><div><b>Key item</b><p>Unlocks new areas or abilities. Somebody is blocked until they get it, so these matter most.</p></div></li>
+      <li><span class="item useful"><i class="g">▲</i>Heart Container</span><div><b>Useful</b><p>Makes life easier, but nobody is stuck without it.</p></div></li>
+      <li><span class="item trap"><i class="g">✖</i>Ice Trap</span><div><b>Trap</b><p>Does something bad to whoever receives it.</p></div></li>
+      <li><span class="item filler"><i class="g">●</i>20 Rupees</span><div><b>Filler</b><p>Currency, ammo and small bonuses. Nice to have.</p></div></li>
+    </ul>
+    <h3>Players have their own colored square</h3>
+    <p>Each player keeps the same square color everywhere, so you can follow one person through the log. The color doesn't mean anything else. Your name carries a <span class="chip me" style="--h:250">Your name</span> tag.</p>
+    <h3>Highlighted rows involve you</h3>
+    <p>Rows with a teal edge are items you sent or received, hints about your items, or your own chat.</p>
+    <h3>Hint status</h3>
+    <p><span class="status-pill prio">Priority</span> you want this item soon. <span class="status-pill">Not needed</span> you can skip it. <span class="status-pill avoid">Avoid</span> it's a trap or harmful. <span class="status-pill found">Found</span> it has already been picked up.</p>
+  </form>
+</dialog>
+
+<dialog id="alertsDlg" aria-labelledby="alertsTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="alertsTitle">Alerts</h2><button class="btn ghost" value="close" aria-label="Close">✕</button></div>
+    <p>Get a sound and a desktop notification while you're in your game. Notifications only appear when ArchipelagoVic isn't the window you're looking at.</p>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" data-alert="keyItem"> You receive a key item</label>
+      <label class="check"><input type="checkbox" data-alert="anyItem"> You receive any item</label>
+      <label class="check"><input type="checkbox" data-alert="hint"> A hint about one of your items</label>
+      <label class="check"><input type="checkbox" data-alert="mention"> Someone mentions your name in chat</label>
+      <label class="check"><input type="checkbox" data-alert="goal"> A player reaches their goal</label>
+    </div>
+    <h3>How</h3>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" data-alert="sound"> Play a sound</label>
+      <label class="check"><input type="checkbox" data-alert="desktop"> Show a desktop notification</label>
+    </div>
+    <div class="dlg-actions"><button class="btn" type="button" id="alertTest">Try it</button><button class="btn primary" value="close">Done</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirmDlg" aria-labelledby="confirmTitle">
+  <form method="dialog" class="guide">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmText"></p>
+    <label class="field hidden" id="promptWrap" style="margin-top:12px"><span id="promptLabel"></span><input class="input" id="promptInput"></label>
+    <div class="dlg-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok" id="confirmOk">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="gameDlg" class="wide" aria-labelledby="gameTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><span class="muted" style="font-size:13px">About this game</span><button class="btn ghost" value="" aria-label="Close">✕</button></div>
+    <div id="gameBody"></div>
+    <p class="muted small-note">Details from Steam, Wikipedia and Wikidata. Right-click the picture to use your own.</p>
+  </form>
+</dialog>
+
+<dialog id="recapDlg" class="wide" aria-labelledby="recapTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="recapTitle">Your game</h2><button class="btn ghost" value="" aria-label="Close">✕</button></div>
+    <div id="recapBody"></div>
+  </form>
+</dialog>
+
+<div class="toast hidden" id="toast" role="status"></div>
+
+<script src="client.js"></script>
+</body>
+</html>

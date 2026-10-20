@@ -1,0 +1,66 @@
+// Narrow bridge between the page and the main process.
+"use strict";
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
+
+const call = async (channel, ...args) => {
+  const r = await ipcRenderer.invoke(channel, ...args);
+  if (!r.ok) throw new Error(r.error);
+  return r.value;
+};
+
+contextBridge.exposeInMainWorld("apvic", {
+  info: () => call("ap:info"),
+  choosePath: () => call("ap:choosePath"),
+  launch: (name, args) => call("ap:launch", name, args),
+  inspectPatch: (file) => call("ap:inspectPatch", file),
+  openPatch: (file) => call("ap:openPatch", file),
+  inspectApworld: (file) => call("ap:inspectApworld", file),
+  installApworld: (file) => call("ap:installApworld", file),
+  looseWorlds: () => call("ap:looseWorlds"),
+  buildApworld: (dir, game) => call("ap:buildApworld", dir, game),
+  artMenu: (game, kind) => call("art:menu", game, kind),
+  setSgdbKey: (k) => call("art:sgdbKey", k),
+  gameInfo: (game) => call("game:info", game),
+  setArtOnline: (on) => call("art:setOnline", on),
+  setCloseToTray: (on) => call("app:setCloseToTray", on),
+  pendingUri: () => call("app:pendingUri"),
+  handleLinks: (on) => call("app:handleLinks", on),
+  onUri: (fn) => ipcRenderer.on("uri:open", (_e, u) => fn(u)),
+  listWorlds: () => call("ap:listWorlds"),
+  removeWorld: (file) => call("ap:removeWorld", file),
+  listPlayers: () => call("ap:listPlayers"),
+  addPlayers: (files) => call("ap:addPlayers", files),
+  useTemplate: (file, name) => call("ap:useTemplate", file, name),
+  removePlayer: (file) => call("ap:removePlayer", file),
+  readFile: (which, file) => call("ap:readFile", which, file),
+  writeFile: (which, file, text) => call("ap:writeFile", which, file, text),
+  listOutput: () => call("ap:listOutput"),
+  pickMultidata: () => call("ap:pickMultidata"),
+  open: (which) => call("ap:open", which),
+  showItem: (full) => call("ap:showItem", full),
+  openExternal: (url) => call("app:openExternal", url),
+  startServer: (opts) => call("server:start", opts),
+  startGenerate: (opts) => call("generate:start", opts),
+  write: (id, text) => call("proc:write", id, text),
+  stop: (id) => call("proc:stop", id),
+  running: () => call("proc:list"),
+  flash: () => call("win:flash"),
+  webJson: (url) => call("web:json", url),
+  webTouch: (url) => call("web:touch", url),
+  hostOnline: () => call("online:host"),
+  onOnlineProgress: (fn) => ipcRenderer.on("online:progress", (_e, d) => fn(d)),
+  copy: (text) => call("app:copy", text),
+  checkUpdates: (force) => call("updates:check", force),
+  setWorldRepo: (mod, repo) => call("updates:setRepo", mod, repo),
+  updateWorld: (mod) => call("updates:installWorld", mod),
+  toggleMini: () => call("mini:toggle"),
+  miniUpdate: (d) => call("mini:update", d),
+  miniGet: () => call("mini:get"),
+  miniClose: () => call("mini:close"),
+  focusMain: () => call("mini:focusMain"),
+  onMiniData: (fn) => ipcRenderer.on("mini:data", (_e, d) => fn(d)),
+  onMiniState: (fn) => ipcRenderer.on("mini:state", (_e, on) => fn(on)),
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return null; } },
+  onProcData: (fn) => ipcRenderer.on("proc:data", (_e, d) => fn(d)),
+  onProcExit: (fn) => ipcRenderer.on("proc:exit", (_e, d) => fn(d)),
+});

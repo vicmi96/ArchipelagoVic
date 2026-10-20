@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src ws: wss:; img-src 'self' data: apvic-icon:">
+<title>ArchipelagoVic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell" id="shell">
+<nav class="rail" id="rail" aria-label="ArchipelagoVic">
+  <div class="rail-brand">
+    <svg width="30" height="30" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21" fill="var(--sea-soft)"/><path d="M8 27c3 0 3-2 6-2s3 2 6 2 3-2 6-2 3 2 6 2 3-2 6-2" fill="none" stroke="var(--sea)" stroke-width="2.4" stroke-linecap="round"/><path d="M13 23l4-8 3 5 2-3 5 6" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    <span>ArchipelagoVic</span>
+  </div>
+  <button class="rail-item" data-view="home" aria-current="page">Home</button>
+  <button class="rail-item" data-view="play">Play <span class="rail-note" id="railPlay"></span></button>
+  <button class="rail-item" data-view="host">Host <span class="rail-note" id="railHost"></span></button>
+  <button class="rail-item" data-view="generate">Generate <span class="rail-note" id="railGen"></span></button>
+  <button class="rail-item" data-view="worlds">Worlds</button>
+  <button class="rail-item" data-view="tools">Clients &amp; tools</button>
+  <button class="rail-item" data-view="settings">Settings</button>
+  <div class="rail-foot" id="railFoot">—</div>
+</nav>
+
+
+<div class="views">
+<!-- ============ Home ============ -->
+<section class="view" data-view="home">
+  <div class="page">
+    <header class="page-head">
+      <h1>What do you want to do?</h1>
+      <p id="homeInstall" class="muted">Looking for Archipelago…</p>
+    </header>
+    <div class="install-warn hidden" id="installWarn">
+      <b>Archipelago wasn't found.</b> ArchipelagoVic needs your Archipelago install to host, generate and launch games. Joining a game works without it.
+      <button class="btn" type="button" data-action="choosePath">Choose Archipelago folder</button>
+    </div>
+    <ol class="tasks">
+      <li><div><h2>Join a game</h2><p>Connect to a room to follow items, hints and chat.</p></div><button class="btn primary" data-go="play">Join</button></li>
+      <li><div><h2>Host a game</h2><p>Run a generated multiworld on this PC so friends can connect.</p></div><button class="btn" data-go="host" data-needs-ap>Host</button></li>
+      <li><div><h2>Generate a game</h2><p>Turn your players' YAML files into a new multiworld.</p></div><button class="btn" data-go="generate" data-needs-ap>Generate</button></li>
+      <li><div><h2>Open a patch file</h2><p>Patch a ROM and start its game client from a file you downloaded from the room page.</p></div><button class="btn" data-action="openPatch" data-needs-ap>Open patch…</button></li>
+      <li><div><h2>Start a game client</h2><p>SNI, BizHawk, Factorio and every other client your install has.</p></div><button class="btn" data-go="tools" data-needs-ap>Choose client</button></li>
+    </ol>
+    <div class="home-cols">
+      <section>
+        <h3>Recent rooms</h3>
+        <ul class="plain-list" id="homeRecent"><li class="muted">Rooms you join show up here.</li></ul>
+      </section>
+      <section>
+        <h3>Updates</h3>
+        <ul class="plain-list" id="homeUpdates"><li class="muted">Checking…</li></ul>
+        <h3>Running now</h3>
+        <ul class="plain-list" id="homeRunning"><li class="muted">Nothing running.</li></ul>
+        <h3>Community</h3>
+        <ul class="plain-list links">
+          <li><a href="https://archipelago.gg/" data-ext>Archipelago website</a></li>
+          <li><a href="https://discord.gg/8Z65BR2" data-ext>Archipelago Discord</a></li>
+          <li><a href="https://discord.gg/fqvNCCRsu4" data-ext>Unrated / 18+ Discord (After Dark)</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ Play (text client) ============ -->
+<section class="view hidden" data-view="play">
+  <div class="room-bar" role="tablist" aria-label="Rooms">
+    <div class="room-tabs" id="roomTabs"></div>
+    <button class="btn ghost small" type="button" id="roomAdd" title="Join another room in a new tab">+ New room</button>
+    <span class="spacer"></span>
+    <button class="btn ghost small" type="button" id="miniToggle" title="A small always-on-top window with your latest items">Mini window</button>
+  </div>
+  <div class="room-frames" id="roomFrames"></div>
+</section>
+
+<!-- ============ Host ============ -->
+<section class="view hidden" data-view="host">
+  <div class="split">
+    <form class="side-form" id="hostForm" autocomplete="off">
+      <h1>Host a game</h1>
+      <div class="field">
+        <label for="hMulti">Multiworld</label>
+        <select class="input" id="hMulti"></select>
+        <div class="row-actions"><button class="btn small" type="button" id="hBrowse">Browse…</button><button class="btn small" type="button" id="hRefresh">Refresh list</button></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="hPort">Port</label><input class="input" id="hPort" inputmode="numeric" placeholder="38281"></div>
+        <div class="field"><label for="hHint">Hint cost (% of checks)</label><input class="input" id="hHint" inputmode="numeric"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="hPass">Room password</label><input class="input" id="hPass" type="password" placeholder="None"></div>
+        <div class="field"><label for="hAdmin">Admin password</label><input class="input" id="hAdmin" type="password" placeholder="None"></div>
+      </div>
+      <details class="more">
+        <summary>More server rules</summary>
+        <div class="field"><label for="hRelease">Release (give away your remaining items)</label>
+          <select class="input" id="hRelease"><option value="">Use host.yaml</option><option value="auto">Automatically on goal</option><option value="enabled">Any time</option><option value="auto-enabled">Any time, and automatically on goal</option><option value="goal">Only after goal</option><option value="disabled">Never</option></select></div>
+        <div class="field"><label for="hCollect">Collect (get your remaining items)</label>
+          <select class="input" id="hCollect"><option value="">Use host.yaml</option><option value="auto">Automatically on goal</option><option value="enabled">Any time</option><option value="auto-enabled">Any time, and automatically on goal</option><option value="goal">Only after goal</option><option value="disabled">Never</option></select></div>
+        <div class="field"><label for="hRemaining">Remaining (list items left in your world)</label>
+          <select class="input" id="hRemaining"><option value="">Use host.yaml</option><option value="enabled">Any time</option><option value="goal">Only after goal</option><option value="disabled">Never</option></select></div>
+        <div class="grid2">
+          <div class="field"><label for="hPoints">Hint points per check</label><input class="input" id="hPoints" inputmode="numeric"></div>
+          <div class="field"><label for="hShutdown">Auto-stop after idle (s)</label><input class="input" id="hShutdown" inputmode="numeric" placeholder="Never"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="hNoCheat"> Turn off the !getitem cheat command</label>
+      </details>
+      <div class="form-actions">
+        <button class="btn primary" type="submit" id="hStart">Start server</button>
+        <button class="btn" type="button" id="hStop" disabled>Stop server</button>
+      </div>
+      <button class="btn" type="button" id="hJoin" disabled>Join this game</button>
+      <p class="muted small-note">Friends connect to your PC's address and port. Outside your home network, the port has to be forwarded on your router.</p>
+    </form>
+    <div class="console-wrap">
+      <div class="console-head"><h2>Server console</h2><span class="muted" id="hState">Not running</span></div>
+      <pre class="console" id="hLog" aria-live="polite"></pre>
+      <form class="console-input" id="hCmdForm">
+        <div class="row-actions">
+          <button class="btn small" type="button" data-scmd="/players">Who's connected</button>
+          <button class="btn small" type="button" data-scmd="/status">Progress</button>
+          <button class="btn small" type="button" data-scmd="/save">Save now</button>
+          <button class="btn small" type="button" data-scmd="/help">All commands</button>
+        </div>
+        <div class="row-input"><input class="input mono" id="hCmd" placeholder="Server command, e.g. /send Alice Hookshot" disabled><button class="btn primary" id="hCmdSend" disabled>Run</button></div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Generate ============ -->
+<section class="view hidden" data-view="generate">
+  <div class="split">
+    <div class="side-form">
+      <h1>Generate a game</h1>
+      <p class="muted">Every YAML in your Players folder becomes one player in the multiworld.</p>
+      <div class="field"><label for="gSeed">Seed</label><input class="input" id="gSeed" inputmode="numeric" placeholder="Random"></div>
+      <div class="field"><label for="gSpoiler">Spoiler log</label>
+        <select class="input" id="gSpoiler"><option value="">Use host.yaml</option><option value="0">None</option><option value="1">Item locations</option><option value="2">Item locations and playthrough</option><option value="3">Full, with paths</option></select></div>
+      <label class="check"><input type="checkbox" id="gRace"> Race mode (hides spoilers and some info)</label>
+      <label class="check"><input type="checkbox" id="gNoBalance"> Skip progression balancing</label>
+      <div class="form-actions"><button class="btn primary" id="gStart" type="button">Generate on this PC</button></div>
+      <div class="result hidden" id="gResult"></div>
+      <div class="online-box">
+        <h3>Or host it online</h3>
+        <p class="muted">Generates on archipelago.gg and opens a room there, so friends join with a link and no port forwarding. Only games that ship with Archipelago work there; the options above don't apply.</p>
+        <button class="btn" id="gOnline" type="button">Generate and host on archipelago.gg</button>
+        <p class="muted small-note hidden" id="gOnlineState" aria-live="polite"></p>
+        <div class="result hidden" id="gOnlineResult"></div>
+      </div>
+      <div class="console-wrap compact">
+        <div class="console-head"><h2>Generator output</h2><span class="muted" id="gState">Idle</span></div>
+        <pre class="console" id="gLog"></pre>
+      </div>
+    </div>
+    <div class="main-col dropzone" id="gDrop">
+      <div class="section-h"><h2>Players</h2><p id="gCount">—</p><span class="spacer"></span>
+        <button class="btn small" type="button" id="gAdd">Add YAML files…</button><button class="btn small" type="button" data-open="players">Open folder</button><button class="btn small" type="button" id="gReload">Refresh</button></div>
+      <div id="gPlayers"></div>
+      <div class="section-h"><h2>Start from a template</h2><p>Copy a game's default options into Players, then edit it.</p><span class="spacer"></span>
+        <button class="btn small" type="button" id="gTemplates">Create templates</button></div>
+      <input class="input search" id="gTplSearch" type="search" placeholder="Find a game" style="margin:0 18px 8px;max-width:280px">
+      <div id="gTpl"></div>
+      <div class="drop-hint">Drop .yaml files anywhere here to add them.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Worlds ============ -->
+<section class="view hidden" data-view="worlds">
+  <div class="page dropzone" id="wDrop">
+    <header class="page-head">
+      <h1>Worlds</h1>
+      <p class="muted">Games that don't ship with Archipelago come as .apworld files. Installed ones live in <button class="linkish" data-open="worlds">custom_worlds</button>.</p>
+    </header>
+    <div class="row-actions"><button class="btn primary" type="button" id="wInstall">Install .apworld…</button><button class="btn" type="button" id="wReload">Refresh</button></div>
+    <div id="wList"></div>
+    <p class="muted small-note">ArchipelagoVic checks each file before installing: that it's a real APWorld, which game it is, and whether your Archipelago version is new enough. Archipelago programs that are already open need a restart to see a new world. Removing a world moves it to the Recycle Bin.</p>
+    <h3>Build APWorlds</h3>
+    <p class="muted">Pack a world folder into an .apworld file you can share. Results go to <button class="linkish" data-open="build">build\apworlds</button>.</p>
+    <div id="wBuild"><button class="btn" type="button" id="wBuildLoad">Find world folders</button></div>
+    <h3>More world tools</h3>
+    <ul class="plain-list">
+      <li><button class="linkish" data-launch="Export Datapackage">Export Datapackage</button> <span class="muted">item and location data for every installed world</span></li>
+      <li><button class="linkish" data-launch="Generate Template Options">Generate Template Options</button> <span class="muted">default YAMLs for every installed game</span></li>
+    </ul>
+    <p class="muted small-note">These two read every world's Python code, so they run inside Archipelago's own runtime. No Launcher window opens.</p>
+    <div class="drop-hint">Drop .apworld files here to install them.</div>
+  </div>
+</section>
+
+<!-- ============ Clients & tools ============ -->
+<section class="view hidden" data-view="tools">
+  <div class="page">
+    <header class="page-head">
+      <h1>Clients &amp; tools</h1>
+      <p class="muted">Every game client and tool from your Archipelago install. Patch files, APWorlds, hosting, generating and the text client are built into ArchipelagoVic.</p>
+    </header>
+    <input class="input search" id="tSearch" type="search" placeholder="Find a game or tool" style="max-width:320px">
+    <div id="tList"></div>
+    <p class="muted small-note">Right-click any game picture to use your own.</p>
+  </div>
+</section>
+
+<!-- ============ Settings ============ -->
+<section class="view hidden" data-view="settings">
+  <div class="page">
+    <header class="page-head"><h1>Settings</h1></header>
+    <h3>Archipelago install</h3>
+    <p id="sInstall" class="muted">—</p>
+    <div class="row-actions"><button class="btn" type="button" data-action="choosePath">Change folder…</button><button class="btn" type="button" data-open="base">Browse files</button><button class="btn" type="button" data-open="logs">Open logs</button><button class="btn" type="button" data-launch="Options Creator">Options Creator</button></div>
+    <h3>host.yaml</h3>
+    <p class="muted">Defaults for hosting, generating and every game client. A backup is kept as host.yaml.bak each time you save.</p>
+    <textarea class="input mono yaml-edit" id="sHost" spellcheck="false" aria-label="host.yaml"></textarea>
+    <div class="row-actions"><button class="btn primary" type="button" id="sHostSave">Save host.yaml</button><button class="btn" type="button" id="sHostRevert">Revert</button><button class="btn" type="button" data-open="host">Open in editor</button></div>
+    <h3>Window</h3>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" id="sTray"> Closing the window keeps ArchipelagoVic running in the tray</label>
+      <p class="muted small-note" style="margin:0 0 0 24px">Your rooms stay connected and alerts keep coming. Click the tray icon to open it again; right-click it to quit. Turn this off to quit when you close the window.</p>
+    </div>
+    <h3>Links and pictures</h3>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" id="sLinks"> Open archipelago:// room links in ArchipelagoVic</label>
+      <p class="muted small-note" style="margin:0 0 0 24px">Links from a room page join the game right here. Turn this off to hand links back to the official Launcher.</p>
+      <label class="check"><input type="checkbox" id="sArt"> Download game icons, pictures and details</label>
+      <p class="muted small-note" style="margin:0 0 0 24px">Icons come from SteamGridDB and Steam, covers and summaries from Steam and Wikipedia. Each is downloaded once and kept on this PC. Right-click any icon to use your own.</p>
+    </div>
+    <h3>Icons for games that aren't on Steam</h3>
+    <p class="muted">Steam games get their icon automatically. For the rest (Zelda, Pokémon, Kirby…) SteamGridDB has icons, but it needs a free API key from your SteamGridDB account. <a href="https://www.steamgriddb.com/profile/preferences/api" data-ext>Get your key</a>, then paste it here.</p>
+    <div class="row-input" style="max-width:560px"><input class="input mono" id="sSgdb" type="password" placeholder="SteamGridDB API key" autocomplete="off" spellcheck="false"><button class="btn" type="button" id="sSgdbSave">Save key</button></div>
+    <div>
+    </div>
+    <h3>ArchipelagoVic</h3>
+    <div class="row-actions"><button class="btn" type="button" id="sAlerts">Alerts…</button><button class="btn" type="button" id="sTheme">Theme</button><button class="btn" type="button" data-guide>Color guide</button></div>
+    <p class="muted small-note" id="sAbout"></p>
+  </div>
+</section>
+
+</div>
+</div>
+
+<dialog id="guide" aria-labelledby="guideTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="guideTitle">Reading the colors</h2><button class="btn ghost" value="close" aria-label="Close">✕</button></div>
+    <h3>Items are colored by how important they are</h3>
+    <ul class="guide-list">
+      <li><span class="item prog"><i class="g">★</i>Hookshot</span><div><b>Key item</b><p>Unlocks new areas or abilities. Somebody is blocked until they get it, so these matter most.</p></div></li>
+      <li><span class="item useful"><i class="g">▲</i>Heart Container</span><div><b>Useful</b><p>Makes life easier, but nobody is stuck without it.</p></div></li>
+      <li><span class="item trap"><i class="g">✖</i>Ice Trap</span><div><b>Trap</b><p>Does something bad to whoever receives it.</p></div></li>
+      <li><span class="item filler"><i class="g">●</i>20 Rupees</span><div><b>Filler</b><p>Currency, ammo and small bonuses. Nice to have.</p></div></li>
+    </ul>
+    <h3>Players have their own colored square</h3>
+    <p>Each player keeps the same square color everywhere, so you can follow one person through the log. The color doesn't mean anything else. Your name carries a <span class="chip me" style="--h:250">Your name</span> tag.</p>
+    <h3>Highlighted rows involve you</h3>
+    <p>Rows with a teal edge are items you sent or received, hints about your items, or your own chat.</p>
+    <h3>Hint status</h3>
+    <p><span class="status-pill prio">Priority</span> you want this item soon. <span class="status-pill">Not needed</span> you can skip it. <span class="status-pill avoid">Avoid</span> it's a trap or harmful. <span class="status-pill found">Found</span> it has already been picked up.</p>
+  </form>
+</dialog>
+
+<dialog id="alertsDlg" aria-labelledby="alertsTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="alertsTitle">Alerts</h2><button class="btn ghost" value="close" aria-label="Close">✕</button></div>
+    <p>Get a sound and a desktop notification while you're in your game. Notifications only appear when ArchipelagoVic isn't the window you're looking at.</p>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" data-alert="keyItem"> You receive a key item</label>
+      <label class="check"><input type="checkbox" data-alert="anyItem"> You receive any item</label>
+      <label class="check"><input type="checkbox" data-alert="hint"> A hint about one of your items</label>
+      <label class="check"><input type="checkbox" data-alert="mention"> Someone mentions your name in chat</label>
+      <label class="check"><input type="checkbox" data-alert="goal"> A player reaches their goal</label>
+    </div>
+    <h3>How</h3>
+    <div class="opt-list">
+      <label class="check"><input type="checkbox" data-alert="sound"> Play a sound</label>
+      <label class="check"><input type="checkbox" data-alert="desktop"> Show a desktop notification</label>
+    </div>
+    <div class="dlg-actions"><button class="btn" type="button" id="alertTest">Try it</button><button class="btn primary" value="close">Done</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirmDlg" aria-labelledby="confirmTitle">
+  <form method="dialog" class="guide">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmText"></p>
+    <label class="field hidden" id="promptWrap" style="margin-top:12px"><span id="promptLabel"></span><input class="input" id="promptInput"></label>
+    <div class="dlg-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok" id="confirmOk">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="editorDlg" class="wide" aria-labelledby="editorTitle">
+  <form method="dialog" class="guide editor">
+    <div class="guide-head"><h2 id="editorTitle">Edit</h2><button class="btn ghost" value="cancel" aria-label="Close">✕</button></div>
+    <p class="muted" id="editorNote"></p>
+    <div class="seg hidden" id="editorMode" role="group" aria-label="View"><button type="button" data-m="form" aria-pressed="true">Form</button><button type="button" data-m="text" aria-pressed="false">Text</button></div>
+    <div class="yf hidden" id="editorForm"></div>
+    <textarea id="editorText" spellcheck="false" aria-label="File contents"></textarea>
+    <div class="dlg-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="save">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="sheetDlg" aria-labelledby="sheetTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="sheetTitle"></h2><button class="btn ghost" value="" aria-label="Close">✕</button></div>
+    <div id="sheetBody"></div>
+    <div class="dlg-actions" id="sheetActions"></div>
+  </form>
+</dialog>
+
+<dialog id="gameDlg" class="wide" aria-labelledby="gameTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><span class="muted" style="font-size:13px">About this game</span><button class="btn ghost" value="" aria-label="Close">✕</button></div>
+    <div id="gameBody"></div>
+    <p class="muted small-note">Details from Steam, Wikipedia and Wikidata. Right-click the picture to use your own.</p>
+  </form>
+</dialog>
+
+<div class="toast hidden" id="toast" role="status"></div>
+
+
+<script src="client.js"></script>
+<script src="yamlform.js"></script>
+<script src="launcher.js"></script>
+</body>
+</html>

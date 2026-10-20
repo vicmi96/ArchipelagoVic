@@ -1,0 +1,337 @@
+{
+ "_about": "Where ArchipelagoVic looks for each game's art. steam = Steam app id, wiki = English Wikipedia article title, none = no art (shows a lettered tile). Games not listed are searched on Steam by name, then Wikipedia. A picture you set yourself always wins.",
+ "A Hat in Time": {
+  "steam": 253230
+ },
+ "A Link to the Past": {
+  "wiki": "The Legend of Zelda: A Link to the Past"
+ },
+ "A Short Hike": {
+  "steam": 1055540
+ },
+ "APQuest": {
+  "none": true
+ },
+ "Adventure": {
+  "wiki": "Adventure (1980 video game)"
+ },
+ "Aquaria": {
+  "steam": 216250
+ },
+ "Archipelago": {
+  "local": "data/icon.png"
+ },
+ "Blasphemous": {
+  "steam": 774361
+ },
+ "Bomb Rush Cyberfunk": {
+  "steam": 1353230
+ },
+ "Bumper Stickers": {
+  "none": true
+ },
+ "Castlevania - Circle of the Moon": {
+  "wiki": "Castlevania: Circle of the Moon"
+ },
+ "Castlevania 64": {
+  "wiki": "Castlevania (1999 video game)"
+ },
+ "Celeste (Open World)": {
+  "steam": 504230
+ },
+ "Celeste 64": {
+  "wiki": "Celeste 64: Fragments of the Mountain",
+  "steam": 504230
+ },
+ "ChecksFinder": {
+  "none": true
+ },
+ "Choo-Choo Charles": {
+  "steam": 1766740
+ },
+ "Civilization VI": {
+  "steam": 289070
+ },
+ "DLCQuest": {
+  "steam": 230050
+ },
+ "DOOM 1993": {
+  "steam": 2280
+ },
+ "DOOM II": {
+  "steam": 2300
+ },
+ "Dark Souls III": {
+  "steam": 374320
+ },
+ "EarthBound": {
+  "wiki": "EarthBound"
+ },
+ "Factorio": {
+  "steam": 427520
+ },
+ "Faxanadu": {
+  "wiki": "Faxanadu"
+ },
+ "Final Fantasy": {
+  "wiki": "Final Fantasy (video game)"
+ },
+ "Final Fantasy Mystic Quest": {
+  "wiki": "Final Fantasy Mystic Quest"
+ },
+ "Gauntlet Legends": {
+  "wiki": "Gauntlet Legends"
+ },
+ "Heretic": {
+  "steam": 2390
+ },
+ "Hollow Knight": {
+  "steam": 367520
+ },
+ "Hylics 2": {
+  "steam": 1286710
+ },
+ "Inscryption": {
+  "steam": 1092790
+ },
+ "Jak and Daxter: The Precursor Legacy": {
+  "wiki": "Jak and Daxter: The Precursor Legacy"
+ },
+ "Kingdom Hearts": {
+  "wiki": "Kingdom Hearts (video game)"
+ },
+ "Kingdom Hearts 2": {
+  "wiki": "Kingdom Hearts II"
+ },
+ "Kirby's Dream Land 3": {
+  "wiki": "Kirby's Dream Land 3"
+ },
+ "Landstalker - The Treasures of King Nole": {
+  "wiki": "Landstalker"
+ },
+ "Lingo": {
+  "steam": 1814170
+ },
+ "Links Awakening DX": {
+  "wiki": "The Legend of Zelda: Link's Awakening"
+ },
+ "Lufia II Ancient Cave": {
+  "wiki": "Lufia II: Rise of the Sinistrals"
+ },
+ "Mario & Luigi Superstar Saga": {
+  "wiki": "Mario & Luigi: Superstar Saga"
+ },
+ "Mega Man 2": {
+  "wiki": "Mega Man 2"
+ },
+ "Mega Man 3": {
+  "wiki": "Mega Man 3"
+ },
+ "MegaMan Battle Network 3": {
+  "wiki": "Mega Man Battle Network 3"
+ },
+ "Meritous": {
+  "none": true
+ },
+ "Muse Dash": {
+  "steam": 774171
+ },
+ "Noita": {
+  "steam": 881100
+ },
+ "Ocarina of Time": {
+  "wiki": "The Legend of Zelda: Ocarina of Time"
+ },
+ "Old School Runescape": {
+  "steam": 1343370
+ },
+ "Overcooked! 2": {
+  "steam": 728880
+ },
+ "Oxygen Not Included": {
+  "steam": 457140
+ },
+ "Paint": {
+  "none": true
+ },
+ "Pokemon Emerald": {
+  "wiki": "Pokémon Emerald"
+ },
+ "Pokemon Red and Blue": {
+  "wiki": "Pokémon Red, Blue, and Yellow"
+ },
+ "Raft": {
+  "steam": 648800
+ },
+ "Risk of Rain 2": {
+  "steam": 632360
+ },
+ "SMZ3": {
+  "wiki": "Super Metroid"
+ },
+ "Satisfactory": {
+  "steam": 526870
+ },
+ "Saving Princess": {
+  "none": true
+ },
+ "Secret of Evermore": {
+  "wiki": "Secret of Evermore"
+ },
+ "Shivers": {
+  "wiki": "Shivers (video game)"
+ },
+ "Sonic Adventure 2 Battle": {
+  "steam": 213610
+ },
+ "Starcraft 2": {
+  "wiki": "StarCraft II: Wings of Liberty"
+ },
+ "Stardew Valley": {
+  "steam": 413150
+ },
+ "Subnautica": {
+  "steam": 264710
+ },
+ "Super Mario 64": {
+  "wiki": "Super Mario 64"
+ },
+ "Super Mario Land 2": {
+  "wiki": "Super Mario Land 2: 6 Golden Coins"
+ },
+ "Super Mario World": {
+  "wiki": "Super Mario World"
+ },
+ "Super Metroid": {
+  "wiki": "Super Metroid"
+ },
+ "TUNIC": {
+  "steam": 553420
+ },
+ "Terraria": {
+  "steam": 105600
+ },
+ "The Legend of Zelda": {
+  "wiki": "The Legend of Zelda (video game)"
+ },
+ "The Messenger": {
+  "steam": 764790
+ },
+ "The Wind Waker": {
+  "wiki": "The Legend of Zelda: The Wind Waker"
+ },
+ "The Witness": {
+  "steam": 210970
+ },
+ "Timespinner": {
+  "steam": 368620
+ },
+ "Undertale": {
+  "steam": 391540
+ },
+ "VVVVVV": {
+  "steam": 70300
+ },
+ "Wargroove": {
+  "steam": 607050
+ },
+ "Yacht Dice": {
+  "none": true
+ },
+ "Yoshi's Island": {
+  "wiki": "Super Mario World 2: Yoshi's Island"
+ },
+ "Yu-Gi-Oh! 2006": {
+  "wiki": "Yu-Gi-Oh! Ultimate Masters: World Championship Tournament 2006"
+ },
+ "Zillion": {
+  "wiki": "Zillion (video game)"
+ },
+ "shapez": {
+  "steam": 1318690
+ },
+ "_builtin": [
+  "A Hat in Time",
+  "A Link to the Past",
+  "A Short Hike",
+  "APQuest",
+  "Adventure",
+  "Aquaria",
+  "Archipelago",
+  "Blasphemous",
+  "Bomb Rush Cyberfunk",
+  "Bumper Stickers",
+  "Castlevania - Circle of the Moon",
+  "Castlevania 64",
+  "Celeste (Open World)",
+  "Celeste 64",
+  "ChecksFinder",
+  "Choo-Choo Charles",
+  "Civilization VI",
+  "DLCQuest",
+  "DOOM 1993",
+  "DOOM II",
+  "Dark Souls III",
+  "EarthBound",
+  "Factorio",
+  "Faxanadu",
+  "Final Fantasy",
+  "Final Fantasy Mystic Quest",
+  "Gauntlet Legends",
+  "Heretic",
+  "Hollow Knight",
+  "Hylics 2",
+  "Inscryption",
+  "Jak and Daxter: The Precursor Legacy",
+  "Kingdom Hearts",
+  "Kingdom Hearts 2",
+  "Kirby's Dream Land 3",
+  "Landstalker - The Treasures of King Nole",
+  "Lingo",
+  "Links Awakening DX",
+  "Lufia II Ancient Cave",
+  "Mario & Luigi Superstar Saga",
+  "Mega Man 2",
+  "Mega Man 3",
+  "MegaMan Battle Network 3",
+  "Meritous",
+  "Muse Dash",
+  "Noita",
+  "Ocarina of Time",
+  "Old School Runescape",
+  "Overcooked! 2",
+  "Paint",
+  "Pokemon Emerald",
+  "Pokemon Red and Blue",
+  "Raft",
+  "Risk of Rain 2",
+  "SMZ3",
+  "Satisfactory",
+  "Saving Princess",
+  "Secret of Evermore",
+  "Shivers",
+  "Sonic Adventure 2 Battle",
+  "Starcraft 2",
+  "Stardew Valley",
+  "Subnautica",
+  "Super Mario 64",
+  "Super Mario Land 2",
+  "Super Mario World",
+  "Super Metroid",
+  "TUNIC",
+  "Terraria",
+  "The Legend of Zelda",
+  "The Messenger",
+  "The Wind Waker",
+  "The Witness",
+  "Timespinner",
+  "Undertale",
+  "VVVVVV",
+  "Wargroove",
+  "Yacht Dice",
+  "Yoshi's Island",
+  "Yu-Gi-Oh! 2006",
+  "Zillion",
+  "shapez"
+ ]
+}
