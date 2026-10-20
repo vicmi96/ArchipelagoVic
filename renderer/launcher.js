@@ -141,7 +141,7 @@ async function quitArchipelagoVic(){
     const text = [
       server ? "The server you're hosting stops and everyone is disconnected. Progress is saved." : null,
       rooms ? `You leave ${rooms === 1 ? "your room" : `your ${rooms} rooms`}. ${rooms === 1 ? "It opens" : "They open"} again the next time you start ArchipelagoVic.` : null,
-      "Games you started from Games keep running.",
+      "EmuHawk and the BizHawk Client keep running.",
     ].filter(Boolean).join(" ");
     const ok = await askConfirm("Quit ArchipelagoVic?", text, server ? "Stop server and quit" : "Quit");
     quitAsking = false;
@@ -825,7 +825,7 @@ async function editProfile(p){
   renderGames();
 }
 async function removeProfile(p){
-  if (!(await askConfirm("Remove this game?", `${p.game || "This game"} is removed from Games. Your ROM, patch files and host.yaml stay as they are.`, "Remove"))) return;
+  if (!(await askConfirm("Remove this game?", `${p.game || "This game"} is removed from BizHawk. Your ROM, patch files and host.yaml stay as they are.`, "Remove"))) return;
   await attempt(() => API.profileRemove(p.id));
   delete G.checks[p.id];
   renderGames();

@@ -19,7 +19,7 @@
   </div>
   <button class="rail-item" data-view="home" aria-current="page">Home</button>
   <button class="rail-item" data-view="play">Play <span class="rail-note" id="railPlay"></span></button>
-  <button class="rail-item" data-view="games">Games</button>
+  <button class="rail-item" data-view="games">BizHawk</button>
   <button class="rail-item" data-view="host">Host <span class="rail-note" id="railHost"></span></button>
   <button class="rail-item" data-view="generate">Generate <span class="rail-note" id="railGen"></span></button>
   <button class="rail-item" data-view="worlds">Worlds</button>
@@ -45,7 +45,7 @@
     </div>
     <ol class="tasks">
       <li><div><h2>Join a game</h2><p>Connect to a room to follow items, hints and chat.</p></div><button class="btn primary" data-go="play">Join</button></li>
-      <li><div><h2>Play a BizHawk game</h2><p>Patch your ROM, start EmuHawk and the BizHawk Client, and join the room in one click.</p></div><button class="btn" data-go="games" data-needs-ap>Games</button></li>
+      <li><div><h2>Play a BizHawk game</h2><p>Patch your ROM, start EmuHawk and the BizHawk Client, and join the room in one click.</p></div><button class="btn" data-go="games" data-needs-ap>BizHawk</button></li>
       <li><div><h2>Host a game</h2><p>Run a generated multiworld on this PC so friends can connect.</p></div><button class="btn" data-go="host" data-needs-ap>Host</button></li>
       <li><div><h2>Generate a game</h2><p>Turn your players' YAML files into a new multiworld.</p></div><button class="btn" data-go="generate" data-needs-ap>Generate</button></li>
       <li><div><h2>Open a patch file</h2><p>Patch a ROM and start its game client from a file you downloaded from the room page.</p></div><button class="btn" data-action="openPatch" data-needs-ap>Open patch…</button></li>
@@ -84,11 +84,11 @@
   <div class="room-frames" id="roomFrames"></div>
 </section>
 
-<!-- ============ Games (one-click Play) ============ -->
+<!-- ============ BizHawk (one-click Play for BizHawk games; internal view name "games") ============ -->
 <section class="view hidden" data-view="games">
   <div class="page">
     <header class="page-head">
-      <h1>Games</h1>
+      <h1>BizHawk games</h1>
       <p class="muted">One-click Play for games that run in the BizHawk emulator, like Pokémon Red and Blue. Play patches your ROM, starts EmuHawk with the Archipelago connector, starts the BizHawk Client and opens the room here.</p>
     </header>
     <div class="row-actions"><button class="btn primary" type="button" id="pAdd">Add a game…</button></div>
