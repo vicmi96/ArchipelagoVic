@@ -81,7 +81,7 @@
       <button class="btn ghost small" type="button" id="recapBtn" title="Your game so far: checks over time, who sent you the most">Recap</button>
       <button class="btn ghost small" type="button" id="alertsBtn" title="Sounds and desktop notifications">Alerts</button>
       <button class="btn ghost small" type="button" data-guide>Colors</button>
-      <button class="btn ghost small in-browser" id="themeBtn" title="Switch light / dark theme">Theme</button>
+      <button class="btn ghost small in-browser" id="themeBtn" title="Choose a colour theme">Theme</button>
       <button class="btn ghost small" id="disconnectBtn">Disconnect</button>
     </div>
   </header>
@@ -275,6 +275,13 @@
   </form>
 </dialog>
 
+<dialog id="themeDlg" class="wide" aria-labelledby="themeTitle">
+  <form method="dialog" class="guide">
+    <div class="guide-head"><h2 id="themeTitle">Theme</h2><button class="btn ghost" value="" aria-label="Close">✕</button></div>
+    <div class="theme-mode" data-theme-mode-wrap><span class="muted">Light or dark (Archipelago theme):</span><div class="seg" data-theme-mode role="group" aria-label="Light or dark"><button type="button" data-m="auto">Auto</button><button type="button" data-m="light">Light</button><button type="button" data-m="dark">Dark</button></div></div>
+    <div class="theme-picker" data-theme-picker></div>
+  </form>
+</dialog>
 <dialog id="recapDlg" class="wide" aria-labelledby="recapTitle">
   <form method="dialog" class="guide">
     <div class="guide-head"><h2 id="recapTitle">Your game</h2><button class="btn ghost" value="" aria-label="Close">✕</button></div>
@@ -284,6 +291,7 @@
 
 <div class="toast hidden" id="toast" role="status"></div>
 
+<script src="themes.js"></script>
 <script src="client.js"></script>
 </body>
 </html>

@@ -119,7 +119,125 @@ function inspectPatch(file) {
   if (!manifest) { const alt = zip.names.find(n => n.endsWith("archipelago.json")); if (alt) manifest = zip.json(alt); }
   if (!manifest) throw new Error("This doesn't look like an Archipelago patch file (no archipelago.json inside).");
   return { file, suffix: path.extname(file).toLowerCase(), game: manifest.game || null, player: manifest.player ?? null,
-    playerName: manifest.player_name || null, server: manifest.server || null, patchEnding: manifest.patch_file_ending || null };
+    playerName: manifest.player_name || null, server: manifest.server || null, patchEnding: manifest.patch_file_ending || null,
+    // the MD5 of the original ROM this patch needs, and the patched game's file ending (procedure patches only)
+    baseChecksum: typeof manifest.base_checksum === "string" ? manifest.base_checksum.toLowerCase() : null, resultEnding: manifest.result_file_ending || null };
+}
+
+/* ================= original ROMs ================= */
+// ROMs ArchipelagoVic knows by name, by MD5: what they are and where Archipelago keeps them in host.yaml.
+const KNOWN_ROMS = {
+  "3d45c1ee9abd5738df46d2bdda8b57dc": { game: "Pokemon Red and Blue", name: "Pokémon Red (US/Europe)", title: "POKEMON RED", size: 1048576, patch: ".apred", section: "pokemon_rb_options", key: "red_rom_file" },
+  "50927e843568814f7ed45ec4f944bd8b": { game: "Pokemon Red and Blue", name: "Pokémon Blue (US/Europe)", title: "POKEMON BLUE", size: 1048576, patch: ".apblue", section: "pokemon_rb_options", key: "blue_rom_file" },
+};
+const knownRomsFor = game => Object.entries(KNOWN_ROMS).filter(([, k]) => k.game === game).map(([md5, k]) => ({ md5, ...k }));
+// Size, MD5 and (Game Boy) cartridge title of a ROM file.
+async function romFacts(file) {
+  const st = await fsp.stat(file);
+  const hash = require("crypto").createHash("md5");
+  const head = [];
+  let got = 0;
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(file).on("data", b => { hash.update(b); if (got < 0x150) { head.push(b.subarray(0, 0x150 - got)); got += b.length; } }).on("end", resolve).on("error", reject);
+  });
+  const h = Buffer.concat(head);
+  let title = null;
+  if (/\.gbc?$/i.test(file) && h.length >= 0x144) title = h.subarray(0x134, 0x144).toString("latin1").replace(/\0.*$/s, "").trim() || null;
+  return { size: st.size, mtime: st.mtimeMs, md5: hash.digest("hex"), title };
+}
+const fmtSize = n => n >= 1048576 ? `${+(n / 1048576).toFixed(n % 1048576 ? 1 : 0)} MB` : `${Math.round(n / 1024)} KB`;
+// Plain-language explanation of why a ROM isn't the one needed. facts: from romFacts; wanted: [{ md5, name?, title?, size? }].
+function romMismatch(file, facts, wanted, game) {
+  const need = wanted.length === 1 && wanted[0].name ? wanted[0].name : wanted.some(w => w.name) ? wanted.filter(w => w.name).map(w => w.name).join(" or ") : `the original ROM ${game || "this game"} needs`;
+  const base = path.basename(file);
+  const other = KNOWN_ROMS[facts.md5];
+  let why;
+  if (other && other.game === game) why = `This is the ${other.name} ROM, but this patch needs ${need}. Choose your ${need} ROM, or use a patch made for ${other.name.replace(/ \(.*\)$/, "")}.`;
+  else if (other) why = `This is the ${other.name} ROM, which is for ${other.game}, not ${game || "this game"}. Choose ${need} instead.`;
+  else if (/^AP_\d+_P\d+/i.test(base) || hasPatchNextTo(file))
+    why = `${base} looks like a game Archipelago already patched. Patching needs the original, unpatched ROM. Choose your ${need} ROM instead.`;
+  else {
+    const w = wanted.find(x => x.title);
+    if (w && facts.title && facts.title !== w.title) why = `Its cartridge title is "${facts.title}", not "${w.title}", so it's a different game, a fan hack or a changed copy, not ${need}.`;
+    else if (wanted.every(x => x.size) && !wanted.some(x => x.size === facts.size)) why = `It's ${fmtSize(facts.size)}, but ${need} is ${fmtSize(wanted[0].size)}. That usually means a different release (another region, a revision or a multi-game cartridge) or a hack.`;
+    else why = `It isn't an exact copy of ${need}. That usually means a different version or region (for example the Japanese release or a later revision), a copy that was already patched or changed, or a bad dump.`;
+    why += ` Use a clean copy of ${need}, ideally dumped from your own cartridge.`;
+  }
+  return `${why} (Expected MD5 ${wanted.map(x => x.md5).join(" or ")}; this file's is ${facts.md5}.)`;
+}
+// True when an Archipelago patch file with the same name sits next to this ROM (it's that patch's output).
+function hasPatchNextTo(file) {
+  const stem = path.basename(file).replace(/\.[^.]+$/, "").toLowerCase();
+  try { return fs.readdirSync(path.dirname(file)).some(n => /\.ap[a-z0-9]+$/i.test(n) && !/\.apworld$/i.test(n) && n.replace(/\.[^.]+$/, "").toLowerCase() === stem); } catch { return false; }
+}
+
+/* ================= host.yaml ================= */
+// Change a few "section: key: value" settings in a YAML text such as host.yaml and leave every other
+// line (comments, order, quoting, line endings) exactly as it was. Only plain values can be set.
+// changes: [{ section, key, value }] with value a string, number, boolean or null.
+// Returns { text, changed: [{ section, key, from, to }] }; "from" is the old value as written (null if the key was added).
+function setYamlKeys(text, changes) {
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  const lines = String(text).split(/\r?\n/);
+  const fmt = v => v === null || v === undefined ? "null" : typeof v === "boolean" || typeof v === "number" ? String(v) : JSON.stringify(String(v));
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Split "value   # comment" into its value and the rest, respecting quotes.
+  const splitValue = rest => {
+    let end = rest.length;
+    if (rest.startsWith('"')) { for (let i = 1; i < rest.length; i++) { if (rest[i] === "\\") i++; else if (rest[i] === '"') { end = i + 1; break; } } }
+    else if (rest.startsWith("'")) { for (let i = 1; i < rest.length; i++) { if (rest[i] === "'" && rest[i + 1] === "'") i++; else if (rest[i] === "'") { end = i + 1; break; } } }
+    else { const m = rest.match(/\s+#/); if (m) end = m.index; }
+    return [rest.slice(0, end).trimEnd(), rest.slice(end)];
+  };
+  const changed = [];
+  for (const { section, key, value } of changes) {
+    if (!/^[A-Za-z0-9_]+$/.test(section) || !/^[A-Za-z0-9_]+$/.test(key)) throw new Error(`"${section}.${key}" isn't a setting name.`);
+    const to = fmt(value);
+    const head = lines.findIndex(l => new RegExp(`^${esc(section)}:\\s*(#.*)?$`).test(l));
+    if (head < 0) {
+      while (lines.length && lines[lines.length - 1] === "") lines.pop();
+      lines.push(`${section}:`, `  ${key}: ${to}`, "");
+      changed.push({ section, key, from: null, to });
+      continue;
+    }
+    // The section's lines run until the next top-level line that isn't a comment.
+    let end = head + 1;
+    while (end < lines.length && !/^[^\s#]/.test(lines[end])) end++;
+    const indents = lines.slice(head + 1, end).map(l => l.match(/^(\s+)[A-Za-z0-9_]+:/)).filter(Boolean).map(m => m[1]);
+    const indent = indents.length ? indents.reduce((a, b) => (b.length < a.length ? b : a)) : "  ";
+    const keyRe = new RegExp(`^${esc(indent)}${esc(key)}:(\\s*)(.*)$`);
+    const at = lines.slice(head + 1, end).findIndex(l => keyRe.test(l));
+    if (at < 0) {
+      // Add the key after the section's last setting line, before any comment that introduces the next section.
+      let last = end - 1;
+      while (last > head && (lines[last].trim() === "" || /^#/.test(lines[last]))) last--;
+      lines.splice(last + 1, 0, `${indent}${key}: ${to}`);
+      changed.push({ section, key, from: null, to });
+      continue;
+    }
+    const i = head + 1 + at;
+    const [, gap, rest] = lines[i].match(keyRe);
+    const [old, comment] = splitValue(rest);
+    const next = lines[i + 1];
+    if (old === "" && next !== undefined && next.match(/^\s*/)[0].length > indent.length && next.trim() && !next.trim().startsWith("#"))
+      throw new Error(`${section}.${key} is a list or group in host.yaml, so ArchipelagoVic won't change it.`);
+    if (old === to) continue;
+    lines[i] = `${indent}${key}:${gap || " "}${to}${comment}`;
+    changed.push({ section, key, from: old, to });
+  }
+  return { text: lines.join(eol), changed };
+}
+// The same on a file, read fresh from disk. Before its first change the file is copied to backupFile
+// (an existing backup is never overwritten, so it keeps the person's own settings). Returns the changes.
+async function writeYamlKeys(file, changes, backupFile) {
+  const text = await fsp.readFile(file, "utf8");
+  const r = setYamlKeys(text, changes);
+  if (!r.changed.length) return [];
+  if (backupFile && !fs.existsSync(backupFile)) await fsp.copyFile(file, backupFile);
+  const tmp = file + ".apvic-tmp";
+  await fsp.writeFile(tmp, r.text, "utf8");
+  await fsp.rename(tmp, file);
+  return r.changed;
 }
 
 /* ================= build APWorlds ================= */
@@ -403,4 +521,4 @@ function createArt({ dir, net, apBase, online, sgdbKey }) {
   return { resolve, setCustom, resetCustom, retryMissingIcons, source, info };
 }
 
-module.exports = { readZip, writeZip, crc32, inspectApworld, inspectPatch, looseWorlds, buildApworld, createArt, parseVersion, cmpVersion };
+module.exports = { readZip, writeZip, crc32, inspectApworld, inspectPatch, KNOWN_ROMS, knownRomsFor, romFacts, romMismatch, setYamlKeys, writeYamlKeys, looseWorlds, buildApworld, createArt, parseVersion, cmpVersion };

@@ -10,3 +10,26 @@ Thumbs.db
 desktop.ini
 .DS_Store
 *.log
+
+# Your own theme pictures (only the instructions file is shared).
+theme-pictures/*
+!theme-pictures/README.txt
+
+# Game ROMs must never be committed (they are copyrighted and belong to you only).
+ROM/
+*.gb
+*.gbc
+*.gba
+*.sfc
+*.smc
+*.nes
+*.z64
+*.n64
+*.iso
+*.bin
+
+# Archipelago patch files (.apred, .apblue, ...) and generated games.
+# Patched ROMs use the ROM extensions above. Apworlds (.apworld) are code, so keep them.
+*.ap*
+!*.apworld
+AP_*.zip

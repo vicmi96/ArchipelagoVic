@@ -52,6 +52,31 @@ function joinRoom(prefill){
   }
   return addRoom(prefill);
 }
+// Play a game profile: turn a room link into the room's current address, let the main process check, patch and
+// start EmuHawk and the BizHawk Client, then open the room in a Play tab so the activity feed shows too.
+// onProgress gets { step, state, text } with step server | check | patch | emuhawk | client | room
+// and state running | done | failed.
+async function playGame(profileId, { patch, server, password } = {}, onProgress = () => {}){
+  const input = String(server || "").trim();
+  const link = parseRoomUrl(input) ? input : null;
+  let address = input;
+  if (link){
+    onProgress({ step: "server", state: "running", text: "Waking the room and finding its port…" });
+    try { address = await roomAddress(link); }
+    catch (e) { onProgress({ step: "server", state: "failed", text: e.message }); throw e; }
+  }
+  const off = API.onPlayProgress(onProgress);
+  let r;
+  try { r = await API.play({ id: profileId, patch, server: address, serverInput: input, password }); }
+  finally { off(); }
+  onProgress({ step: "room", state: "running", text: "Opening the room…" });
+  // Playing again while the room's tab is still connected: switch to that tab instead of opening a second one.
+  const open = Rooms.list.find(x => x.status.connected && x.status.server === r.server && x.status.name === r.slot);
+  if (open){ showView("play"); selectRoom(open.id); }
+  else joinRoom({ server: r.server, slot: r.slot, room: link, password, connect: !!r.slot });
+  onProgress({ step: "room", state: "done", text: `Following ${r.slot || "your slot"} in a Play tab${open ? " (already open)" : ""}.` });
+  return r;
+}
 function renderRoomTabs(){
   const box = $("#roomTabs"); if (!box) return;
   box.replaceChildren(...Rooms.list.map((r, i) => {
@@ -101,7 +126,7 @@ function showView(v){
   for (const s of $$(".views > .view")) s.classList.toggle("hidden", s.dataset.view !== v);
   for (const b of $$(".rail-item")) { if (b.dataset.view === v) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); }
   if (!API) return;
-  ({ home:renderHome, host:refreshHost, generate:refreshPlayers, worlds:refreshWorlds, tools:renderTools, settings:loadSettings })[v]?.();
+  ({ home:renderHome, games:renderGames, host:refreshHost, generate:refreshPlayers, worlds:refreshWorlds, tools:renderTools, settings:loadSettings })[v]?.();
 }
 
 /* ---------- small helpers ---------- */
@@ -130,7 +155,7 @@ async function initLauncher(){
   });
   API.onProcData(onProcData);
   API.onProcExit(onProcExit);
-  wireHost(); wireGenerate(); wireWorlds(); wireTools(); wireSettings(); initRooms();
+  wireHost(); wireGenerate(); wireWorlds(); wireTools(); wireGames(); wireSettings(); initRooms();
   API.onUri(u => handleUri(u));
   document.addEventListener("dragover", e => e.preventDefault());
   document.addEventListener("drop", e => {   // drop a patch file anywhere outside a drop zone
@@ -613,6 +638,147 @@ function renderTools(){
   if (!box.children.length) box.append(emptyRow("No match", "Try another name."));
 }
 
+/* ---------- Games (one-click Play for BizHawk games) ---------- */
+const PLAY_STEPS = [
+  ["server", "Find the room"], ["check", "Check EmuHawk, the ROM and the patch"], ["patch", "Patch the ROM"],
+  ["emuhawk", "Start EmuHawk"], ["client", "Start the BizHawk Client"], ["room", "Open the room here"]];
+const G = { list: [], checks: {} };
+const fileName = f => f ? String(f).split(/[\\/]/).pop() : "";
+function wireGames(){ $("#pAdd").addEventListener("click", () => editProfile(null)); }
+async function renderGames(){
+  const box = $("#pList");
+  if (!L.info?.found){ box.replaceChildren(emptyRow("Archipelago not found", "Choose its folder in Settings to play games from here.")); return; }
+  G.list = (await attempt(() => API.profiles())) || [];
+  if (!G.list.length){ box.replaceChildren(emptyRow("No games yet", "Add a game once: where EmuHawk is and your original ROM. After that, Play patches, starts and connects everything.")); return; }
+  box.replaceChildren(...G.list.map(profileCard));
+  for (const p of G.list) API.profileCheck(p.id).then(c => { G.checks[p.id] = c; $(`[data-profile="${p.id}"]`)?.replaceWith(profileCard(p)); }).catch(() => {});
+}
+function profileCard(p){
+  const c = G.checks[p.id];
+  const n = c ? Object.keys(c.problems).length : 0;
+  const blocked = !!(c && (c.problems.emuhawk || c.problems.rom));
+  const state = !c ? h("p",{class:"state"}, h("span",{class:"spin"}), "Checking…")
+    : n ? h("p",{class:"state bad"}, n === 1 ? "1 thing to fix" : `${n} things to fix`, blocked ? " before you can play." : ".")
+    : h("p",{class:"state ok"}, p.patch ? "Ready to play." : "Ready. Choose this game's patch file when you press Play.");
+  const row = (label, value, problem) => [h("dt",null,label), h("dd",null, value, problem ? h("div",{class:"problem"}, problem) : null)];
+  return h("article",{class:"profile-card", "data-profile": p.id},
+    gameIcon(p.game || "Archipelago", "lg"),
+    h("div",{class:"grow"},
+      h("h2",null, p.game || "Game not known yet"), state,
+      h("dl",{class:"kv"},
+        row("EmuHawk", p.emuhawk || "Not set", c?.problems.emuhawk),
+        row("ROM", c?.rom?.known || fileName(p.rom) || "Not set", c?.problems.rom),
+        row("Patch", p.patch ? fileName(p.patch) + (c?.patch?.playerName ? ` · slot ${c.patch.playerName}` : "") : "Chosen when you play", c?.problems.patch),
+        (p.lastServer || p.server) ? row("Room", p.lastServer || p.server, c?.problems.server) : null)),
+    h("div",{class:"acts"},
+      h("button",{class:"btn primary", type:"button", disabled: blocked, title: blocked ? "Fix the lines in red first (Edit)" : null, onclick:() => openPlay(p)}, "Play"),
+      h("button",{class:"btn small", type:"button", onclick:() => editProfile(p)}, "Edit"),
+      h("button",{class:"btn ghost small", type:"button", onclick:() => removeProfile(p)}, "Remove")));
+}
+// A file field with Browse…, or a plain text field, plus a line for its problem.
+function profileField(key, label, placeholder, pick, value, onChange){
+  const input = h("input",{class:"input" + (pick ? " mono" : ""), id:`pf-${key}`, value: value || "", placeholder, spellcheck:"false", autocomplete:"off", "aria-describedby":`pf-${key}-note`});
+  const note = h("div",{class:"problem", id:`pf-${key}-note`, "aria-live":"polite"});
+  input.addEventListener("change", onChange);
+  input.addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // Enter would close the dialog
+  const browse = pick ? h("button",{class:"btn small", type:"button", onclick: async () => { const f = await attempt(() => API.profilePick(pick, input.value)); if (f){ input.value = f; onChange(); } }}, "Browse…") : null;
+  return { input, note, el: h("div",{class:"field"}, h("label",{for:`pf-${key}`}, label), pick ? h("div",{class:"row-input", style:"margin-top:0"}, input, browse) : input, note) };
+}
+async function editProfile(p){
+  const status = h("p",{class:"small-note muted", "aria-live":"polite"});
+  let seq = 0;
+  const f = {};
+  const values = () => Object.fromEntries(Object.entries(f).map(([k, x]) => [k, x.input.value.trim()]));
+  const check = async () => {
+    const n = ++seq;
+    status.className = "small-note muted"; status.replaceChildren(h("span",{class:"spin"}), " Checking…");
+    let c; try { c = await API.profileCheck({ ...values(), id: p?.id }); } catch (e) { c = { problems: {}, error: e.message }; }
+    if (n !== seq) return;
+    for (const [k, x] of Object.entries(f)) { x.note.textContent = c.problems?.[k] || ""; x.input.setAttribute("aria-invalid", c.problems?.[k] ? "true" : "false"); }
+    if (c.game) f.game.input.placeholder = c.game;
+    status.className = "small-note " + (c.error || !c.ok ? "problem" : "ok-note");
+    status.textContent = c.error || (c.ok ? `Everything checks out${c.rom?.known ? `: ${c.rom.known}` : ""}.` : "Fix the lines in red, or save now and fix them later.");
+  };
+  f.emuhawk = profileField("emuhawk", "EmuHawk.exe (BizHawk)", "C:\\BizHawk\\EmuHawk.exe", "emuhawk", p?.emuhawk, check);
+  f.rom = profileField("rom", "Original ROM (not patched)", "The unpatched game, for example Pokemon Red.gb", "rom", p?.rom, check);
+  f.patch = profileField("patch", "Patch file (optional)", "You can also choose it each time you play", "patch", p?.patch, check);
+  f.server = profileField("server", "Default room (optional)", "archipelago.gg room link, or address:port", null, p?.server, check);
+  f.game = profileField("game", "Game", "Filled in from the ROM or the patch", null, p?.game, check);
+  const body = h("div",{class:"profile-form"},
+    f.emuhawk.el,
+    h("p",{class:"muted small-note", style:"margin:-4px 0 4px"}, "No BizHawk yet? Download it from ", h("a",{href:"https://tasvideos.org/BizHawk", "data-ext":true}, "tasvideos.org/BizHawk"), " and unpack it anywhere."),
+    f.rom.el, f.patch.el, f.server.el, f.game.el, status);
+  const done = sheet(p ? `Edit ${p.game || "game"}` : "Add a game", body, [{label:"Cancel", value:""}, {label:"Save", value:"save", primary:true}]);
+  if (p) check();
+  if (await done !== "save") return;
+  const r = await attempt(() => API.profileSave({ ...values(), id: p?.id }));
+  if (!r) return;
+  const n = Object.keys(r.check.problems).length;
+  const host = r.hostChanges.length ? ` host.yaml now uses ${r.hostChanges.map(x => x.key === "emuhawk_path" ? "this EmuHawk" : "this ROM").join(" and ")} too.` : "";
+  toast(r.hostError || (n ? `Saved. ${n === 1 ? "1 thing" : `${n} things`} to fix before you can play.` : `Saved.${host}`));
+  G.checks[r.profile.id] = r.check;
+  renderGames();
+}
+async function removeProfile(p){
+  if (!(await askConfirm("Remove this game?", `${p.game || "This game"} is removed from Games. Your ROM, patch files and host.yaml stay as they are.`, "Remove"))) return;
+  await attempt(() => API.profileRemove(p.id));
+  delete G.checks[p.id];
+  renderGames();
+}
+// The Play sheet: room and patch for this session, then the progress of each step.
+function openPlay(p){
+  const d = $("#sheetDlg");
+  if (d.open) return;
+  const server = h("input",{class:"input", id:"pl-server", value: p.lastServer || p.server || "", placeholder:"archipelago.gg room link, or address:port", spellcheck:"false", autocomplete:"off"});
+  const patch = h("input",{class:"input mono", id:"pl-patch", value: p.patch || "", placeholder:"This game's .apred / .apblue file", spellcheck:"false", autocomplete:"off"});
+  const pass = h("input",{class:"input", id:"pl-pass", type:"password", placeholder:"None", autocomplete:"off"});
+  const browse = h("button",{class:"btn small", type:"button", onclick: async () => { const f = await attempt(() => API.profilePick("patch", patch.value)); if (f) patch.value = f; }}, "Browse…");
+  const steps = h("ol",{class:"play-steps", "aria-label":"Progress"}, PLAY_STEPS.map(([k, label]) =>
+    h("li",{class:"pending", "data-step":k}, h("span",{class:"ic", "aria-hidden":"true"}), h("div",null, h("b",null,label), h("div",{class:"t", "aria-live":"polite"})))));
+  const setStep = ({ step, state, text }) => {
+    const li = steps.querySelector(`[data-step="${step}"]`); if (!li) return;
+    li.className = state;
+    li.querySelector(".ic").textContent = state === "done" ? "✓" : state === "failed" ? "✕" : "";
+    li.querySelector(".t").textContent = text || "";
+  };
+  const msg = h("p",{class:"small-note", "aria-live":"assertive"});
+  const playBtn = h("button",{class:"btn primary", type:"button"}, "Play");
+  const closeBtn = h("button",{class:"btn", value:""}, "Cancel");
+  const inputs = [server, patch, pass, browse, $("#sheetDlg .guide-head button")];   // the ✕ too: no closing halfway
+  for (const i of [server, patch, pass]) i.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); playBtn.click(); } });
+  let running = false;
+  playBtn.addEventListener("click", async () => {
+    if (running) return;
+    running = true; playBtn.disabled = closeBtn.disabled = true; inputs.forEach(i => i.disabled = true);
+    msg.className = "small-note"; msg.textContent = "";
+    for (const [k] of PLAY_STEPS) setStep({ step: k, state: "pending" });
+    try {
+      const r = await playGame(p.id, { patch: patch.value.trim() || null, server: server.value.trim(), password: pass.value || undefined }, setStep);
+      msg.className = "small-note ok-note";
+      msg.textContent = `You're in as ${r.slot || "your slot"}. In EmuHawk, start or continue your game: checks are only sent once you're in the game, not on the title screen. Keep EmuHawk and the BizHawk Client window open while you play, and tick EmuHawk's Config → Customize → "Run in background", or EmuHawk pauses (and the client drops) when you click another window. The activity feed is in the Play tab.`;
+      playBtn.hidden = true; closeBtn.textContent = "Close";
+      renderGames();
+    } catch (e) {
+      msg.className = "small-note problem";
+      msg.textContent = steps.querySelector("li.failed") ? "Nothing was left running. Fix what the red step says, then try again." : e.message;
+      playBtn.textContent = "Try again";
+    } finally { running = false; playBtn.disabled = closeBtn.disabled = false; inputs.forEach(i => i.disabled = false); }
+  });
+  $("#sheetTitle").textContent = `Play ${p.game || ""}`.trim();
+  $("#sheetBody").replaceChildren(h("div",{class:"play-sheet"},
+    h("div",{class:"sheet-head"}, coverImg(p.game || "Archipelago", "xl"), h("div",null, h("b",null, p.game || "Game"), h("div",{class:"muted"}, "Patches your ROM, starts EmuHawk and the BizHawk Client, then joins the room."))),
+    h("div",{class:"field"}, h("label",{for:"pl-server"}, "Room"), server),
+    h("div",{class:"field"}, h("label",{for:"pl-patch"}, "Patch file"), h("div",{class:"row-input", style:"margin-top:0"}, patch, browse)),
+    h("details",{class:"more"}, h("summary",null,"Room password"), h("div",{class:"field"}, h("label",{for:"pl-pass"}, "Password"), pass)),
+    steps, msg));
+  $("#sheetActions").replaceChildren(closeBtn, playBtn);
+  d.onclose = null;
+  d.oncancel = e => { if (running) e.preventDefault(); };
+  d.returnValue = "";
+  d.showModal();
+  (server.value ? playBtn : server).focus();
+}
+
 /* ---------- Settings ---------- */
 let hostOriginal = "";
 function wireSettings(){
@@ -634,10 +800,9 @@ function wireSettings(){
     const r = await attempt(() => API.handleLinks(e.target.checked), on => on ? "archipelago:// links now open in ArchipelagoVic." : "archipelago:// links go back to the official Launcher.");
     if (r === undefined) e.target.checked = !e.target.checked;
   });
-  $("#sTheme").addEventListener("click", cycleTheme);
 }
 async function loadSettings(){
-  applyTheme();
+  loadThemeFolder().then(renderThemeUI);   // picks up pictures added to the theme-pictures folder
   $("#sAbout").textContent = "ArchipelagoVic 2.0. Joining games works without Archipelago installed; everything else uses your install.";
   $("#sArt").checked = L.info?.artOnline !== false;
   $("#sTray").checked = L.info?.closeToTray !== false;

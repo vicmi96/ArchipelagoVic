@@ -1184,8 +1184,17 @@ function postStatus(){
 /* ---------- misc ---------- */
 let toastTimer;
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.remove("hidden"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add("hidden"),3500); }
-function applyTheme(){ const t = store.get("apwc.theme","auto"); if (t==="auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t; const lbl = {auto:"Theme: auto",light:"Theme: light",dark:"Theme: dark"}[t]; $$("#themeBtn, #sTheme").forEach(b => b.textContent = lbl); }
-function cycleTheme(){ const order=["auto","light","dark"]; const t = store.get("apwc.theme","auto"); store.set("apwc.theme", order[(order.indexOf(t)+1)%3]); applyTheme(); }
+function applyTheme(){
+  const mode = store.get("apwc.theme","auto");
+  const t = typeof applyPalette === "function" ? applyPalette(mode) : null;
+  if (!t) { if (mode==="auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = mode; }
+  const fixed = t && t.id !== "default";
+  $$("#themeBtn").forEach(b => b.textContent = fixed ? `Theme: ${t.name}` : `Theme: ${mode}`);
+  $$("[data-theme-mode] button").forEach(b => { b.setAttribute("aria-pressed", String(b.dataset.m === mode)); b.disabled = !!fixed; b.title = fixed ? `${t.name} has its own light/dark look` : ""; });
+}
+function renderThemeUI(){ if (typeof renderThemePicker === "function") $$("[data-theme-picker]").forEach(box => renderThemePicker(box, () => applyTheme())); applyTheme(); }
+function openThemeDialog(){ renderThemeUI(); $("#themeDlg")?.showModal(); }
+function cycleTheme(){ openThemeDialog(); }
 function renderRecent(){
   const rec = store.get("apwc.recent", []); const ul = $("#recentList"); ul.replaceChildren();
   $("#recentWrap").classList.toggle("hidden", !rec.length);
@@ -1214,8 +1223,11 @@ $$("[data-guide]").forEach(b => b.addEventListener("click", () => $("#guide").sh
 $("#alertTest")?.addEventListener("click", () => { const d = alertPrefs(); alertUser("key", "Hookshot from Alice", "Key item · this is what an alert looks like"); if (d.desktop && "Notification" in window && Notification.permission==="granted" && document.hasFocus()) { try{ new Notification("Hookshot from Alice", {body:"Desktop notifications are on.", silent:true}); }catch{} } });
 $$("[data-alert]").forEach(cb => cb.addEventListener("change", () => { const p = alertPrefs(); p[cb.dataset.alert] = cb.checked; store.set("apwc.alerts", p); if (cb.dataset.alert==="desktop" && cb.checked && "Notification" in window && Notification.permission==="default") Notification.requestPermission(); }));
 $("#promptInput")?.addEventListener("keydown", e => { if (e.key==="Enter"){ e.preventDefault(); $("#confirmDlg").close("ok"); } });
-applyTheme();
-window.addEventListener("storage", e => { if (e.key === "apwc.theme") applyTheme(); });
+$$("[data-theme-mode] button").forEach(b => b.addEventListener("click", () => { store.set("apwc.theme", b.dataset.m); applyTheme(); }));
+renderThemeUI();
+if (typeof loadThemeFolder === "function") loadThemeFolder().then(renderThemeUI);
+// Every window and room tab follows the theme picked in any of them.
+window.addEventListener("storage", e => { if (e.key === "apwc.theme" || e.key === "apwc.palette" || e.key === "apwc.themeArt") renderThemeUI(); });
 
 if (CLIENT_UI) {
   $("#connectForm").addEventListener("submit", async e => {
@@ -1239,7 +1251,7 @@ if (CLIENT_UI) {
     connect();
   });
   $("#disconnectBtn").addEventListener("click", () => { S.manualClose = true; clearTimeout(S.retryTimer); try{ S.ws?.close(); }catch{}; S.ws=null; showConnect(); document.title="Archipelago Client"; });
-  $("#themeBtn").addEventListener("click", cycleTheme);
+  $("#themeBtn").addEventListener("click", openThemeDialog);
   $$("#tabs button").forEach(b => b.addEventListener("click", () => selectTab(b.dataset.tab)));
   $("#tabs").addEventListener("keydown", e => {
     if (e.key!=="ArrowRight" && e.key!=="ArrowLeft") return;

@@ -46,6 +46,18 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **Mini window** that stays on top of borderless-fullscreen games and shows every room's checks and the latest items you got.
 - **Lives in the tray.** Closing the window keeps your rooms connected. You can turn this off in Settings.
 
+**One-click Play for BizHawk games** (Pokémon Red and Blue, and other games the BizHawk Client plays)
+- **Set a game up once** in Games: where EmuHawk.exe is and your original ROM. ArchipelagoVic checks every path and the ROM's MD5. If the ROM is wrong, it says why in plain words (another version or region, already patched, a hack or a bad dump) and what to do.
+- **Press Play** and choose the room (address or archipelago.gg room link, the last one is filled in) and this game's patch file. ArchipelagoVic then:
+  1. checks the room is running;
+  2. patches your ROM (skipped when it's already done);
+  3. starts EmuHawk with the Archipelago connector script;
+  4. starts the BizHawk Client connected to the room;
+  5. opens the room in a Play tab, so you see the activity feed too.
+
+  A list shows each step as it happens. If one fails, it says why and closes anything it had started.
+- **Uses the room's current port.** The BizHawk Client is started with the room's address instead of the patch file, because a patch remembers the port the room had when it was made, and archipelago.gg rooms get a new port when they restart.
+
 **archipelago.gg rooms**
 - **Paste a room link** (`https://archipelago.gg/room/…`). ArchipelagoVic wakes the room, finds its port and remembers the link.
 - **Live tracker.** In link rooms, the Players tab shows everyone's real progress from the website: checks done, items received, last active.
@@ -59,7 +71,12 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **Clients & tools:** every game client, tool and adjuster in your install, including ones custom worlds add. Python-only clients start inside Archipelago's own runtime, with no Launcher window.
 - **Patch files and `archipelago://` links** open straight into the right client.
 - **Update checks** for Archipelago and your custom worlds.
-- **Game icons and summaries** (from Steam, SteamGridDB and Wikipedia), light and dark themes.
+- **Game icons and summaries** (from Steam, SteamGridDB and Wikipedia).
+- **17 colour themes** (Settings → Theme):
+  - general ones: Archipelago with Auto/Light/Dark, Midnight, Parchment, Forest, Rosé and High contrast;
+  - palettes inspired by anime: Frieren, Fullmetal Alchemist, One Piece, Naruto, Demon Slayer, Jujutsu Kaisen, Evangelion, Sailor Moon, Cowboy Bebop, Attack on Titan and Spy × Family.
+
+  Every theme recolours the whole app, room tabs and the mini window, and keeps item colours meaning the same thing. You can give any theme your own picture (a favourite character, fan art…), shown at the bottom of the sidebar. Use "Choose picture…" in Settings, or drop images named after the themes (`frieren.png`, `one-piece.jpg`…) into the `theme-pictures` folder; `theme-pictures/README.txt` lists the names. That folder is git-ignored, so your pictures stay on your PC.
 
 ## Install
 
@@ -86,6 +103,7 @@ Windows SmartScreen may warn the first time because the installer isn't code-sig
 |---|---|
 | **Home** | Common tasks, recent rooms, what's running, updates, community links. Drop a patch file, `.apworld` or YAML anywhere on the window. |
 | **Play** | The text client, one tab per room. Type a server address (`archipelago.gg:38281`) or paste a room link, enter your slot name, then Connect. |
+| **Games** | One-click Play for BizHawk games: add a game once (EmuHawk.exe and your original ROM), then Play patches, starts EmuHawk and the BizHawk Client, and joins the room. |
 | **Host** | Runs `ArchipelagoServer.exe` on a generated game. "Join this game" connects you to it. |
 | **Generate** | Your Players folder (add, edit, remove, start from a template). "Generate on this PC" or "Generate and host on archipelago.gg". |
 | **Worlds** | Install, update, remove and build `.apworld` files. |
@@ -97,6 +115,21 @@ Windows SmartScreen may warn the first time because the installer isn't code-sig
 - Click any game's name or icon for its summary: cover, genre, developer, release date and links. Right-click an icon to use your own picture.
 - Games that aren't on Steam (Zelda, Pokémon…) need a free [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) for their icon. Add it under Settings.
 - Just want the text client in a browser? Open `ArchipelagoClient.html`. It needs no install, but it can't host, generate, launch anything or use room links.
+
+### How Play patches your game
+
+Play patches with a small hidden helper, **ArchipelagoVic Patch** (`logic/apvic_logic/patcher.py`). It runs inside your Archipelago install's own runtime (`ArchipelagoLauncherDebug.exe "ArchipelagoVic Patch"`), calls Archipelago's own patch code and writes the patched game next to the patch file, as Archipelago does. No Archipelago window or file picker opens, and it never rewrites `host.yaml`.
+
+The other way, opening the patch with the BizHawk Client, was tried and not used:
+- it always opens the client's window;
+- it connects to the server stored in the patch, which goes stale when a room restarts;
+- it shows a pop-up if patching fails.
+
+Saving a game also sets these in `host.yaml`, so Archipelago's own tools use the same files:
+- `bizhawkclient_options.emuhawk_path`;
+- the game's ROM setting, for example `pokemon_rb_options.red_rom_file`.
+
+Only those lines change; comments and everything else stay. The first time, your original is kept as `host.yaml.apvic-backup`.
 
 ## Screenshots
 
@@ -133,7 +166,14 @@ npm start
 - **Can't connect to an archipelago.gg room.** Rooms go to sleep after a while. Paste the room link instead of the address, and ArchipelagoVic wakes the room and finds its new port.
 - **Hosting online says a game isn't supported.** archipelago.gg can only generate games that ship with Archipelago. Generate and host games from custom `.apworld` files on your PC.
 - **"Couldn't work out what you can reach".** Usually the YAML is missing or doesn't match the game you're playing. Use "Choose YAML…" and pick the YAML you made for that slot. "Details" shows Universal Tracker's own message. A few game worlds ask trackers not to work out their logic, and ArchipelagoVic respects that.
-- **Where's my data?** Settings, saved rooms, history and game pictures are in `%APPDATA%\ArchipelagoVic`.
+- **Games says the ROM isn't right.** Archipelago patches need the exact original game; the message says what's different. A ROM inside a `.zip` has to be unpacked first. Choose the unpatched ROM, not the `AP_…` file Archipelago made.
+- **Games can't find EmuHawk.** Install BizHawk from [tasvideos.org/BizHawk](https://tasvideos.org/BizHawk) (it's a zip you unpack anywhere), then choose `EmuHawk.exe` in the game's Edit. On a new PC, run BizHawk's prerequisites installer once if EmuHawk closes straight away.
+- **The BizHawk Client doesn't say "Connected".** It connects to EmuHawk through the connector script. In EmuHawk, Tools → Lua Console should list `connector_bizhawk_generic.lua` as running.
+- **Checks don't show up in the feed.** Look for one of these:
+  - **EmuHawk isn't set to run in the background.** Tick Config → Customize → "Run in background". Without it EmuHawk pauses when you click another window, and the BizHawk Client loses it ("Connection timed out").
+  - **The game is still on its title screen.** Checks are only sent once you're in the game (Pokémon: after New Game or Continue).
+  - **The BizHawk Client window was closed.** It's Archipelago's own program and the bridge between EmuHawk and the room, so keep it open while you play.
+- **Where's my data?** Settings, saved rooms, history, game pictures and game profiles are in `%APPDATA%\ArchipelagoVic`.
 
 ## Project layout
 
@@ -143,19 +183,22 @@ preload.js              The fixed set of actions the window may ask the main pro
 aplib.js                Zip, APWorld and patch handling; game icons, covers and summaries
 components.json         Every Archipelago Launcher component and how ArchipelagoVic runs it
 game-art.json           Where each game's picture comes from (Steam app or Wikipedia article)
-logic/apvic_logic/      Small Archipelago add-on that runs Universal Tracker's logic without its window
+logic/apvic_logic/      Small Archipelago add-on with two hidden helpers: Universal Tracker's logic
+                        without its window (bridge.py), and patching for Play (patcher.py)
 logic/universal-tracker/  Built-in copy of Universal Tracker (tracker.apworld) and its MIT license
                         (installed into custom_worlds as apvic_logic.apworld when needed)
 renderer/
-  index.html, launcher.js   Main window: Home, Play tabs, Host, Generate, Worlds, Tools, Settings
+  index.html, launcher.js   Main window: Home, Play tabs, Games, Host, Generate, Worlds, Tools, Settings
   client.html, client.js    One room (the text client); also the browser-only client
   mini.html, mini.js        Always-on-top mini window
   yamlform.js               Form editor for player YAMLs
+  themes.js                 Colour themes and the theme picker
   styles.css                Shared styles (light and dark)
   icon.png, icon.ico        App icon
 tools/build-standalone.js   Builds ArchipelagoClient.html
 Changes/                    Timestamped patch notes for every change
 docs/screenshots/           Images used in this README
+ROM/                        Your own ROMs for testing (git-ignored: ROMs are never committed)
 ```
 
 ## License

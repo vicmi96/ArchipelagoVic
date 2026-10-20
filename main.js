@@ -99,6 +99,13 @@ async function folders() {
     hostText,
   };
 }
+// Set a few host.yaml settings for the person (game profiles: the base ROM, emuhawk_path), changing only those lines.
+// The first time, their own host.yaml is kept as host.yaml.apvic-backup.
+async function setHostKeys(changes) {
+  const file = path.join(requireAp(), "host.yaml");
+  if (!fs.existsSync(file)) throw new Error("Your Archipelago folder has no host.yaml yet. Open any Archipelago program once to create it.");
+  return aplib.writeYamlKeys(file, changes, file + ".apvic-backup");
+}
 
 async function installInfo() {
   const base = apPath();
@@ -677,6 +684,58 @@ function registerIpc() {
   handle("logic:stop", async (id) => { stopLogic(id); return true; });
   handle("logic:refresh", async (id) => { const r = logicProcs.get(id); try { r?.child.stdin.write("refresh\n"); } catch {} return !!r; });
 
+  // ---- game profiles ----
+  handle("profile:list", async () => profileList());
+  handle("profile:check", async (x) => checkProfile(normalizeProfile(typeof x === "string" ? { id: x } : x)));
+  handle("profile:save", async (x) => saveProfile(x || {}));
+  handle("profile:remove", async (id) => { config.profiles = profileList().filter(p => p.id !== id); saveConfig(); return true; });
+  handle("play:start", async function (opts = {}) {
+    if (playing) throw new Error("A game is already starting. Wait for it to finish.");
+    const sender = this.sender;
+    const progress = (step, state, text) => { try { if (!sender.isDestroyed()) sender.send("play:progress", { step, state, text }); } catch {} };
+    const started = [];
+    playing = true;
+    try { return await playProfile(opts, progress, started); }
+    catch (e) { for (const c of started) killTree(c); throw e; }   // leave nothing half-started
+    finally { playing = false; }
+  });
+  handle("profile:pick", async function (kind, current) {
+    const owner = BrowserWindow.fromWebContents(this.sender) || win;
+    const what = {
+      emuhawk: { title: "Choose EmuHawk.exe (BizHawk)", filters: [{ name: "EmuHawk", extensions: ["exe"] }] },
+      rom: { title: "Choose the original ROM", filters: [{ name: "ROM files", extensions: ROM_EXTENSIONS }, { name: "All files", extensions: ["*"] }] },
+      patch: { title: "Choose this game's patch file", filters: [{ name: "Archipelago patch files", extensions: [...BIZHAWK_SUFFIXES].map(s => s.slice(1)) }, { name: "All files", extensions: ["*"] }] },
+    }[kind];
+    if (!what) throw new Error("Unknown file.");
+    const cur = cleanPath(current);
+    const r = await dialog.showOpenDialog(owner, { title: what.title, properties: ["openFile"], filters: what.filters, defaultPath: cur && path.isAbsolute(cur) ? cur : undefined });
+    return r.canceled ? null : r.filePaths[0];
+  });
+
+  handle("theme:pickImage", async function (id) {
+    if (!/^[a-z0-9-]{1,40}$/.test(id || "")) throw new Error("Unknown theme.");
+    const owner = BrowserWindow.fromWebContents(this.sender) || win;
+    const r = await dialog.showOpenDialog(owner, { title: "Choose a picture for this theme", properties: ["openFile"], filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif", "avif"] }] });
+    if (r.canceled) return null;
+    const src = r.filePaths[0];
+    if (!IMG_EXT.test(src)) throw new Error("Choose a PNG, JPG, WebP, GIF or AVIF image.");
+    const st = await fsp.stat(src);
+    if (st.size > 20 * 1024 * 1024) throw new Error("That picture is over 20 MB. Choose a smaller one.");
+    await fsp.mkdir(themeArtDir(), { recursive: true });
+    await clearThemeArt(id);
+    await fsp.copyFile(src, path.join(themeArtDir(), id + path.extname(src).toLowerCase()));
+    return { v: Date.now() };
+  });
+  handle("theme:folder", async () => ({ path: themeFolder(), images: themeFolderImages() }));
+  handle("theme:openFolder", async () => {
+    const dir = themeFolder();
+    await fsp.mkdir(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
+    return dir;
+  });
+  handle("theme:clearImage", async (id) => { if (/^[a-z0-9-]{1,40}$/.test(id || "")) await clearThemeArt(id); return true; });
+
   handle("mini:toggle", async () => { if (mini && !mini.isDestroyed()) { mini.close(); return false; } createMini(); return true; });
   handle("mini:update", async (data) => { miniData = data || { rooms: [] }; updateTrayMenu(); if (mini && !mini.isDestroyed()) mini.webContents.send("mini:data", miniData); return true; });
   handle("mini:get", async () => miniData);
@@ -688,6 +747,39 @@ function killTree(child) {
   if (!child || child.exitCode !== null) return;
   if (IS_WIN) { try { spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }); } catch {} }
   else { try { child.kill("SIGTERM"); } catch {} }
+}
+
+/* ---------------- theme pictures (the person's own images, one per theme) ---------------- */
+const themeArtDir = () => path.join(app.getPath("userData"), "theme-art");
+const IMG_EXT = /\.(png|jpe?g|webp|gif|avif)$/i;
+function themeArtFile(id) {
+  if (!/^[a-z0-9-]{1,40}$/.test(id || "")) return null;
+  try { const n = fs.readdirSync(themeArtDir()).find(f => f.replace(IMG_EXT, "") === id && IMG_EXT.test(f)); return n ? path.join(themeArtDir(), n) : null; } catch { return null; }
+}
+// The theme-pictures folder: images named after a theme ("frieren.png", "one-piece.jpg") are used for that theme.
+// Next to the project files when run from source, next to the program when installed.
+function themeFolder() {
+  if (!app.isPackaged) return path.join(__dirname, "theme-pictures");
+  return path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath), "theme-pictures");
+}
+function themeFolderImages() {
+  const out = {};
+  try {
+    for (const f of fs.readdirSync(themeFolder())) {
+      if (!IMG_EXT.test(f)) continue;
+      const stem = f.replace(IMG_EXT, "").toLowerCase();
+      if (!/^[a-z0-9-]{1,60}$/.test(stem)) continue;
+      out[stem] = Math.round(fs.statSync(path.join(themeFolder(), f)).mtimeMs);
+    }
+  } catch {}
+  return out;
+}
+function themeFolderFile(stem) {
+  if (!/^[a-z0-9-]{1,60}$/.test(stem || "")) return null;
+  try { const n = fs.readdirSync(themeFolder()).find(f => IMG_EXT.test(f) && f.replace(IMG_EXT, "").toLowerCase() === stem); return n ? path.join(themeFolder(), n) : null; } catch { return null; }
+}
+async function clearThemeArt(id) {
+  for (const f of await fsp.readdir(themeArtDir()).catch(() => [])) if (f.replace(IMG_EXT, "") === id && IMG_EXT.test(f)) await fsp.unlink(path.join(themeArtDir(), f)).catch(() => {});
 }
 
 /* ---------------- in-logic helper ---------------- */
@@ -720,10 +812,10 @@ function utInstalled(base) {
   try { names = fs.readdirSync(cw); } catch {}
   return names.some(n => /^tracker\b.*\.apworld$/i.test(n)) || fs.existsSync(path.join(cw, "tracker", "__init__.py")) || fs.existsSync(path.join(base, "lib", "worlds", "tracker"));
 }
-// The helper ships as plain files in logic/ and is packed into custom_worlds/apvic_logic.apworld when it's missing or out of date.
+// The helpers (Logic and Patch) ship as plain files in logic/ and are packed into custom_worlds/apvic_logic.apworld when it's missing or out of date.
 function bridgeZip() {
   const dir = path.join(__dirname, "logic", "apvic_logic");
-  return aplib.writeZip(["__init__.py", "bridge.py", "archipelago.json"].map(n => ({ name: `apvic_logic/${n}`, data: fs.readFileSync(path.join(dir, n)) })));
+  return aplib.writeZip(["__init__.py", "bridge.py", "patcher.py", "archipelago.json"].map(n => ({ name: `apvic_logic/${n}`, data: fs.readFileSync(path.join(dir, n)) })));
 }
 async function ensureBridge(base) {
   const target = path.join(base, "custom_worlds", "apvic_logic.apworld");
@@ -773,6 +865,263 @@ function stopLogic(id) {
   setTimeout(() => killTree(r.child), 4000);
 }
 function stopAllLogic() { for (const id of [...logicProcs.keys()]) stopLogic(id); }
+
+/* ---------------- game profiles (one-click Play for BizHawk games) ---------------- */
+const BIZHAWK_SUFFIXES = new Set((COMPONENTS.find(c => c.name === "BizHawk Client") || {}).suffixes || []);
+const ROM_EXTENSIONS = ["gb", "gbc", "gba", "nes", "sfc", "smc", "z64", "n64", "v64", "nds", "md", "gen", "sms", "gg", "pce", "iso", "bin", "cue"];
+const profileList = () => (Array.isArray(config.profiles) ? config.profiles : []);
+const cleanPath = v => String(v || "").trim().replace(/^"(.*)"$/, "$1") || null;
+
+// ROM facts (size, MD5, title) are cached by path, size and time, so a big ROM is only read once.
+async function cachedRomFacts(file) {
+  const st = await fsp.stat(file);
+  const cache = config.romFacts || {};
+  const c = cache[file];
+  if (c && c.size === st.size && c.mtime === st.mtimeMs) return c;
+  const f = await aplib.romFacts(file);
+  const keep = Object.keys(cache).filter(k => k !== file).slice(-49);
+  config.romFacts = { ...Object.fromEntries(keep.map(k => [k, cache[k]])), [file]: f };
+  saveConfig();
+  return f;
+}
+
+// Runs the hidden "ArchipelagoVic Patch" helper (logic/apvic_logic/patcher.py) and returns its APVIC message.
+async function runPatchHelper(args, timeoutMs = 120000) {
+  const base = requireAp();
+  const exe = debugLauncher(base);
+  if (!fs.existsSync(exe)) throw new Error("Your Archipelago install has no ArchipelagoLauncherDebug.exe, which patching needs. Reinstall Archipelago 0.6.2 or newer.");
+  await ensureBridge(base);
+  return new Promise((resolve, reject) => {
+    const child = spawn(exe, ["ArchipelagoVic Patch", "--", ...args], { cwd: base, env: childEnv(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    child.stdin.end();
+    let out = "", err = "";
+    const timer = setTimeout(() => { killTree(child); reject(new Error("Archipelago took more than two minutes to patch the game, so it was stopped.")); }, timeoutMs);
+    child.stdout.on("data", d => { out += d.toString("utf8"); });
+    child.stderr.on("data", d => { err = (err + d.toString("utf8")).slice(-4000); });
+    child.on("error", e => { clearTimeout(timer); reject(new Error(`Couldn't start Archipelago: ${e.message}`)); });
+    child.on("exit", () => {
+      clearTimeout(timer);
+      const line = out.split(/\r?\n/).find(l => l.startsWith("APVIC "));
+      if (!line) return reject(new Error(`Archipelago stopped without an answer. ${err.trim().split(/\r?\n/).slice(-3).join(" ")}`.trim()));
+      try { resolve(JSON.parse(line.slice(6))); } catch { reject(new Error("Archipelago's answer couldn't be read.")); }
+    });
+  });
+}
+
+// A server address (host:port) or an Archipelago room link. Returns a problem, or null when it's fine (or empty).
+function serverProblem(s) {
+  s = String(s || "").trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) {
+    try { if (/^\/room\/[A-Za-z0-9_-]+\/?$/.test(new URL(s).pathname)) return null; } catch {}
+    return "That link isn't an Archipelago room link. Room links look like https://archipelago.gg/room/…";
+  }
+  const m = s.replace(/^wss?:\/\//i, "").match(/^([^\s:/]+)(?::(\d{1,5}))?$/);
+  if (!m || (m[2] && +m[2] > 65535)) return "Type the server as address:port (for example localhost:38281 or archipelago.gg:38281), or paste a room link.";
+  return null;
+}
+
+// Checks every path in a profile. problems has one plain-language sentence per field that's wrong:
+// emuhawk, rom, patch, server. Also reports the ROM's facts, the patch, the hashes it needs and its host.yaml setting.
+async function checkProfile(p) {
+  const problems = {};
+  const out = { problems, game: p.game || null, rom: null, patch: null, expected: [], romSetting: null };
+  const isFile = f => { try { return fs.statSync(f).isFile(); } catch { return false; } };
+
+  if (!p.emuhawk) problems.emuhawk = "Choose EmuHawk.exe. If BizHawk isn't installed yet, download it from tasvideos.org/BizHawk and unpack it anywhere.";
+  else if (!path.isAbsolute(p.emuhawk)) problems.emuhawk = "Use the full path to EmuHawk.exe, starting with the drive (C:\\…).";
+  else if (!/^emuhawk\.exe$/i.test(path.basename(p.emuhawk))) problems.emuhawk = "Choose EmuHawk.exe itself: the program inside your BizHawk folder.";
+  else if (!isFile(p.emuhawk)) problems.emuhawk = `EmuHawk.exe isn't at ${p.emuhawk}. Choose where it is now.`;
+
+  let inspected = null;
+  const inspect = async () => (inspected ??= await runPatchHelper(["--inspect", p.patch]).catch(e => ({ type: "error", text: e.message })));
+  if (p.patch) {
+    if (!path.isAbsolute(p.patch) || !isFile(p.patch)) problems.patch = `The patch file ${p.patch} isn't there. Choose this game's patch file again.`;
+    else {
+      try {
+        out.patch = aplib.inspectPatch(p.patch);
+        out.game = out.game || out.patch.game;
+        if (p.game && out.patch.game && out.patch.game !== p.game) problems.patch = `This patch is for ${out.patch.game}, but this profile is for ${p.game}. Choose a ${p.game} patch, or make a profile for ${out.patch.game}.`;
+        else if (!BIZHAWK_SUFFIXES.has(out.patch.suffix)) {
+          const m = await inspect();
+          if (m.type !== "inspect") problems.patch = m.code === "no-handler" ? `Your Archipelago install has no game that uses ${out.patch.suffix} patch files. Install the game's .apworld first.` : `Archipelago couldn't read this patch: ${m.text}`;
+        }
+      } catch (e) {
+        problems.patch = /archipelago\.json|zip/i.test(e.message) ? `${path.basename(p.patch)} isn't an Archipelago patch file, or it's damaged. Download it again from the room or the generated game.` : `Couldn't read the patch file: ${e.message}`;
+      }
+    }
+  }
+
+  let facts = null;
+  if (!p.rom) problems.rom = "Choose the original ROM of the game.";
+  else if (!path.isAbsolute(p.rom) || !isFile(p.rom)) problems.rom = `The ROM isn't at ${p.rom}. Choose where it is now.`;
+  else if (/\.(zip|7z|rar)$/i.test(p.rom)) problems.rom = "That's a compressed archive. Unpack the ROM inside it first, then choose the unpacked file.";
+  else {
+    try {
+      facts = await cachedRomFacts(p.rom);
+      out.rom = { size: facts.size, md5: facts.md5, title: facts.title, known: aplib.KNOWN_ROMS[facts.md5]?.name || null };
+      out.game = out.game || aplib.KNOWN_ROMS[facts.md5]?.game || null;   // a ROM we know names its game
+    } catch (e) { problems.rom = `Couldn't read the ROM: ${e.message}`; }
+  }
+
+  // Which original ROM(s) are needed: the patch says (base_checksum); otherwise ask Archipelago; without a patch, the ROMs we know for this game.
+  if (out.patch && !problems.patch) {
+    let md5 = out.patch.baseChecksum;
+    if (!md5) { const m = await inspect(); md5 = m.type === "inspect" ? m.expectedHash : null; }
+    if (md5) out.expected = [{ md5, ...(aplib.KNOWN_ROMS[md5] || {}) }];
+  } else if (!p.patch) out.expected = aplib.knownRomsFor(out.game);
+  if (facts && out.expected.length && !out.expected.some(w => w.md5 === facts.md5)) problems.rom = aplib.romMismatch(p.rom, facts, out.expected, out.game);
+
+  // Where Archipelago keeps this ROM in host.yaml, so its own tools use the same one.
+  if (out.rom && !problems.rom) {
+    const k = aplib.KNOWN_ROMS[out.rom.md5];
+    if (k) out.romSetting = { section: k.section, key: k.key };
+    else if (out.patch && !problems.patch) { const m = await inspect(); if (m.type === "inspect" && m.romSection && m.romKey) out.romSetting = { section: m.romSection, key: m.romKey }; }
+  }
+
+  const sp = serverProblem(p.server);
+  if (sp) problems.server = sp;
+  out.ok = !Object.keys(problems).length;
+  return out;
+}
+
+function normalizeProfile(x = {}) {
+  const old = profileList().find(p => p.id === x.id) || {};
+  const pick = k => (x[k] !== undefined ? x[k] : old[k]);
+  return {
+    id: old.id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    game: String(pick("game") || "").trim().slice(0, 120) || null,
+    emuhawk: cleanPath(pick("emuhawk")),
+    rom: cleanPath(pick("rom")),
+    patch: cleanPath(pick("patch")),
+    server: String(pick("server") || "").trim().slice(0, 300) || null,
+    lastServer: old.lastServer || null,
+  };
+}
+
+// Saves a profile even when something is wrong (so it can be fixed later), and puts the parts that are right into host.yaml.
+async function saveProfile(x) {
+  const p = normalizeProfile(x);
+  const check = await checkProfile(p);
+  if (!p.game && check.game) p.game = check.game;
+  const changes = [];
+  if (p.emuhawk && !check.problems.emuhawk) changes.push({ section: "bizhawkclient_options", key: "emuhawk_path", value: p.emuhawk });
+  if (check.romSetting) changes.push({ ...check.romSetting, value: p.rom });
+  let hostChanges = [], hostError = null;
+  if (changes.length) { try { hostChanges = await setHostKeys(changes); } catch (e) { hostError = `Saved, but host.yaml couldn't be updated: ${e.message}`; } }
+  const list = profileList().filter(q => q.id !== p.id);
+  const at = profileList().findIndex(q => q.id === p.id);
+  list.splice(at < 0 ? list.length : at, 0, p);
+  config.profiles = list; saveConfig();
+  return { profile: p, check, hostChanges, hostError };
+}
+
+/* ---------------- Play: patch the game, start EmuHawk and the BizHawk Client ---------------- */
+// Steps, in order. The window resolves a room link to its address before "server" (roomAddress), and opens
+// the room tab after "client" (step "room"). If any step fails, everything this run started is closed again.
+let playing = false;
+
+// True when something accepts connections at host:port (the Archipelago server is a WebSocket server).
+function serverAnswers(server, ms = 6000) {
+  const m = String(server).replace(/^wss?:\/\//i, "").match(/^([^\s:/]+)(?::(\d+))?$/);
+  if (!m) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const s = require("net").connect({ host: m[1], port: +(m[2] || 38281) });
+    const done = ok => { s.destroy(); resolve(ok); };
+    s.setTimeout(ms, () => done(false));
+    s.once("connect", () => done(true));
+    s.once("error", () => done(false));
+  });
+}
+// Starts a program and waits a moment to make sure it didn't close straight away.
+function startAndWatch(exe, args, cwd, settleMs = 2500) {
+  return new Promise((resolve, reject) => {
+    let child, settled = false;
+    const end = (fn, v) => { if (!settled) { settled = true; fn(v); } };
+    try { child = spawn(exe, args, { cwd, detached: true, stdio: "ignore", env: childEnv(), windowsHide: false }); } catch (e) { reject(e); return; }
+    child.once("error", e => end(reject, e));
+    child.once("exit", code => end(reject, new Error(`it closed straight away (exit code ${code})`)));
+    child.once("spawn", () => setTimeout(() => { child.unref(); end(resolve, child); }, settleMs));
+  });
+}
+function patchHelperProblem(m) {
+  if (m.code === "hash-mismatch") return `${m.text} Choose the original ROM in this game's profile.`;
+  if (m.code === "crash") return `Archipelago couldn't patch the game: ${m.text}`;
+  return m.text || "Archipelago couldn't patch the game.";
+}
+const fileStamp = f => { const s = fs.statSync(f); return `${s.size}:${Math.round(s.mtimeMs)}`; };
+
+async function playProfile(opts, progress, started) {
+  const base = requireAp();
+  const saved = profileList().find(q => q.id === opts.id);
+  if (!saved) throw new Error("That game profile doesn't exist any more.");
+  const p = normalizeProfile({ id: saved.id, patch: opts.patch !== undefined ? opts.patch : saved.patch });
+  const fail = (step, text) => { progress(step, "failed", text); throw new Error(text); };
+
+  // 1. the room answers (a room link was already turned into address:port by the window)
+  const server = String(opts.server || "").trim().replace(/^wss?:\/\//i, "");
+  if (!server) fail("server", "Type the room's address (address:port), or paste its room link.");
+  const sp = serverProblem(server) || (/^https?:/i.test(server) ? "Room links have to be turned into an address first." : null);
+  if (sp) fail("server", sp);
+  progress("server", "running", `Looking for the room at ${server}…`);
+  if (!(await serverAnswers(server)))
+    fail("server", `Nothing answered at ${server}. Check that the room is running and the port is right. archipelago.gg rooms get a new port when they restart, so paste the room link instead of the address.`);
+  progress("server", "done", `The room at ${server} is running.`);
+
+  // 2. EmuHawk, the ROM and the patch
+  progress("check", "running", "Checking EmuHawk, the ROM and the patch…");
+  if (!p.patch) fail("check", "Choose this game's patch file (.apred, .apblue…). Every generated game has a new one.");
+  const check = await checkProfile(p);
+  const bad = ["emuhawk", "patch", "rom"].map(k => check.problems[k]).filter(Boolean);
+  if (bad.length) fail("check", bad.join(" "));
+  const lua = path.join(base, "data", "lua", "connector_bizhawk_generic.lua");
+  const clientExe = path.join(base, "ArchipelagoBizHawkClient.exe");
+  if (!fs.existsSync(lua)) fail("check", "Your Archipelago install has no BizHawk connector script (data\\lua\\connector_bizhawk_generic.lua). Reinstall Archipelago.");
+  if (!fs.existsSync(clientExe)) fail("check", "Your Archipelago install has no ArchipelagoBizHawkClient.exe. Reinstall Archipelago.");
+  const slot = check.patch.playerName || "";
+  progress("check", "done", `${check.rom.known || path.basename(p.rom)}, and the ${check.game} patch${slot ? ` for ${slot}` : ""}.`);
+
+  // 3. patch, unless the patched game from this patch and this ROM is already there
+  let output = check.patch.resultEnding ? p.patch.replace(/\.[^.\\/]+$/, "") + check.patch.resultEnding : null;
+  const prev = output && (config.patched || {})[output];
+  if (prev && fs.existsSync(output) && prev.patch === fileStamp(p.patch) && prev.rom === check.rom.md5 && prev.out === fileStamp(output)) {
+    progress("patch", "done", `Already patched: ${path.basename(output)}.`);
+  } else {
+    progress("patch", "running", "Patching your ROM…");
+    let m;
+    try { m = await runPatchHelper(["--rom", p.rom, p.patch]); } catch (e) { fail("patch", e.message); }
+    if (m.type !== "patched") fail("patch", patchHelperProblem(m));
+    output = m.written;
+    const keep = Object.entries(config.patched || {}).filter(([k]) => k !== output).slice(-19);
+    config.patched = { ...Object.fromEntries(keep), [output]: { patch: fileStamp(p.patch), rom: check.rom.md5, out: fileStamp(output) } };
+    saveConfig();
+    progress("patch", "done", `Patched: ${path.basename(output)}, next to the patch file.`);
+  }
+
+  // 4. EmuHawk with the connector script and the patched game
+  progress("emuhawk", "running", "Starting EmuHawk with the Archipelago connector…");
+  let emu;
+  try { emu = await startAndWatch(p.emuhawk, [`--lua=${lua}`, output], path.dirname(p.emuhawk)); }
+  catch (e) { fail("emuhawk", `EmuHawk didn't start: ${e.message}. Try opening EmuHawk.exe yourself once. On a new PC, BizHawk may first need its prerequisites installer (in the BizHawk download).`); }
+  started.push(emu);
+  progress("emuhawk", "done", `EmuHawk is running ${path.basename(output)}.`);
+
+  // 5. the BizHawk Client, connected to the address we checked. Not given the patch file: its stored
+  //    server would replace --connect (worlds/_bizhawk/context.py), and that port goes stale when a room restarts.
+  progress("client", "running", `Starting the BizHawk Client for ${server}…`);
+  const args = ["--connect", server];
+  if (opts.password) args.push("--password", String(opts.password));
+  let cl;
+  try { cl = await startAndWatch(clientExe, args, base); }
+  catch (e) { fail("client", `The BizHawk Client didn't start: ${e.message}.`); }
+  started.push(cl);
+  progress("client", "done", "The BizHawk Client is running. It finds EmuHawk and connects to the room by itself.");
+
+  // Remember the patch and the room for next time.
+  const i = profileList().findIndex(q => q.id === p.id);
+  if (i >= 0) { config.profiles[i] = { ...config.profiles[i], patch: p.patch, lastServer: String(opts.serverInput || server).trim() }; saveConfig(); }
+  return { server, slot, game: check.game, output, emuhawkPid: emu.pid, clientPid: cl.pid };
+}
 
 /* ---------------- mini window ---------------- */
 function createMini() {
@@ -885,7 +1234,15 @@ else {
     art = aplib.createArt({ dir: path.join(app.getPath("userData"), "game-art"), net, apBase: apPath, online: () => config.artOnline !== false, sgdbKey: () => config.sgdbKey || "" });
     protocol.handle("apvic-icon", async (req) => {
       try {
-        const u = new URL(req.url);   // apvic-icon://icon/<game> or apvic-icon://cover/<game>
+        const u = new URL(req.url);   // apvic-icon://icon/<game>, apvic-icon://cover/<game> or apvic-icon://theme/<theme id>
+        if (u.hostname === "themefolder") {
+          const f = themeFolderFile(decodeURIComponent(u.pathname.replace(/^\//, "")));
+          return f ? net.fetch(pathToFileURL(f).toString()) : new Response(null, { status: 404 });
+        }
+        if (u.hostname === "theme") {
+          const f = themeArtFile(decodeURIComponent(u.pathname.replace(/^\//, "")));
+          return f ? net.fetch(pathToFileURL(f).toString()) : new Response(null, { status: 404 });
+        }
         const game = decodeURIComponent(u.pathname.replace(/^\//, ""));
         const kind = u.hostname === "cover" ? "cover" : "icon";
         const file = game && await art.resolve(game, kind);
