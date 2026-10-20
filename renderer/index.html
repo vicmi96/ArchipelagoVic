@@ -27,6 +27,7 @@
   <button class="rail-item" data-view="settings">Settings</button>
   <div class="rail-art" id="railArt" aria-hidden="true"></div>
   <div class="rail-foot" id="railFoot">—</div>
+  <button class="rail-quit" type="button" id="railQuit" title="Quit ArchipelagoVic (Ctrl+Q). Closing the window only hides it in the tray.">Quit</button>
 </nav>
 
 
@@ -257,6 +258,10 @@
     <div class="row-input" style="max-width:560px"><input class="input mono" id="sSgdb" type="password" placeholder="SteamGridDB API key" autocomplete="off" spellcheck="false"><button class="btn" type="button" id="sSgdbSave">Save key</button></div>
     <div>
     </div>
+    <h3>ArchipelagoVic updates</h3>
+    <p class="muted" id="sSelfState">—</p>
+    <div class="row-actions"><button class="btn" type="button" id="sSelfCheck">Check for updates</button><button class="btn primary hidden" type="button" id="sSelfUpdate">Update…</button></div>
+    <div class="opt-list" style="margin-top:8px"><label class="check"><input type="checkbox" id="sSelfAuto"> Check for ArchipelagoVic updates when it starts</label></div>
     <h3>ArchipelagoVic</h3>
     <div class="row-actions"><button class="btn" type="button" id="sAlerts">Alerts…</button><button class="btn" type="button" data-guide>Color guide</button></div>
     <p class="muted small-note" id="sAbout"></p>

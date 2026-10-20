@@ -8,7 +8,7 @@ const aplib = require("./aplib");
 const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
 const COMPONENTS = require("./components.json");
 
 const IS_WIN = process.platform === "win32";
@@ -543,6 +543,34 @@ function registerIpc() {
     progress("done", server ? `Room ready at ${server}.` : "Room created; it will start when someone opens its page.");
     return { roomUrl, server, seedUrl: `${base}/seed/${j.encoded}`, players: (st?.players || yamls.map(y => [y.name, y.game])) };
   });
+  // The window's Quit button. confirmed: the window already asked about rooms and the server, so don't ask again.
+  handle("app:quit", async (confirmed) => {
+    if (confirmed && win && !win.isDestroyed()) win._confirmedClose = true;
+    setTimeout(quitApp, 50);   // answer the window first
+    return true;
+  });
+  // ---- ArchipelagoVic's own updates ----
+  handle("self:check", async (force, startup) => {
+    const c = config.selfUpdate;
+    if (startup && config.selfAutoCheck === false) return { ...(c && c.current === app.getVersion() ? c : { kind: installKind(), current: app.getVersion() }), auto: false, skipped: true };
+    if (!force && c && c.current === app.getVersion() && Date.now() - c.checked < 12 * 3600e3) return { ...c, auto: config.selfAutoCheck !== false };
+    const u = await selfCheck();
+    config.selfUpdate = u; saveConfig();
+    return { ...u, auto: config.selfAutoCheck !== false };
+  });
+  handle("self:setAuto", async (on) => { config.selfAutoCheck = !!on; saveConfig(); return config.selfAutoCheck; });
+  handle("self:install", async function () {
+    if (selfUpdating) throw new Error("An update is already being installed.");
+    const sender = this.sender;
+    const progress = (stage, got, total) => { try { if (!sender.isDestroyed()) sender.send("self:progress", { stage, got, total }); } catch {} };
+    selfUpdating = true;
+    try {
+      const r = await selfInstall(progress);
+      config.selfUpdate = null; saveConfig();
+      setTimeout(() => { if (win && !win.isDestroyed()) win._confirmedClose = true; quitApp(); }, 400);   // the window already asked about rooms and the server
+      return r;
+    } finally { selfUpdating = false; }
+  });
   handle("app:copy", async (text) => { require("electron").clipboard.writeText(String(text)); return true; });
   // ---- update checks (GitHub releases) ----
   const UT_REPO = "FarisTheAncient/Archipelago";
@@ -757,26 +785,38 @@ function themeArtFile(id) {
   try { const n = fs.readdirSync(themeArtDir()).find(f => f.replace(IMG_EXT, "") === id && IMG_EXT.test(f)); return n ? path.join(themeArtDir(), n) : null; } catch { return null; }
 }
 // The theme-pictures folder: images named after a theme ("frieren.png", "one-piece.jpg") are used for that theme.
-// Next to the project files when run from source, next to the program when installed.
+// Next to the project files when run from source, next to the program when installed or portable.
 function themeFolder() {
   if (!app.isPackaged) return path.join(__dirname, "theme-pictures");
   return path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath), "theme-pictures");
 }
+// Folders searched for theme pictures, first match wins: your own folder, then (installed or portable)
+// the pictures that ship with ArchipelagoVic (resources\theme-pictures).
+function themeFolders() {
+  const dirs = [themeFolder()];
+  if (app.isPackaged) dirs.push(path.join(process.resourcesPath, "theme-pictures"));
+  return dirs;
+}
 function themeFolderImages() {
   const out = {};
-  try {
-    for (const f of fs.readdirSync(themeFolder())) {
-      if (!IMG_EXT.test(f)) continue;
-      const stem = f.replace(IMG_EXT, "").toLowerCase();
-      if (!/^[a-z0-9-]{1,60}$/.test(stem)) continue;
-      out[stem] = Math.round(fs.statSync(path.join(themeFolder(), f)).mtimeMs);
-    }
-  } catch {}
+  for (const dir of themeFolders().reverse()) {   // your own folder last, so its pictures win
+    try {
+      for (const f of fs.readdirSync(dir)) {
+        if (!IMG_EXT.test(f)) continue;
+        const stem = f.replace(IMG_EXT, "").toLowerCase();
+        if (!/^[a-z0-9-]{1,60}$/.test(stem)) continue;
+        out[stem] = Math.round(fs.statSync(path.join(dir, f)).mtimeMs);
+      }
+    } catch {}
+  }
   return out;
 }
 function themeFolderFile(stem) {
   if (!/^[a-z0-9-]{1,60}$/.test(stem || "")) return null;
-  try { const n = fs.readdirSync(themeFolder()).find(f => IMG_EXT.test(f) && f.replace(IMG_EXT, "").toLowerCase() === stem); return n ? path.join(themeFolder(), n) : null; } catch { return null; }
+  for (const dir of themeFolders()) {
+    try { const n = fs.readdirSync(dir).find(f => IMG_EXT.test(f) && f.replace(IMG_EXT, "").toLowerCase() === stem); if (n) return path.join(dir, n); } catch {}
+  }
+  return null;
 }
 async function clearThemeArt(id) {
   for (const f of await fsp.readdir(themeArtDir()).catch(() => [])) if (f.replace(IMG_EXT, "") === id && IMG_EXT.test(f)) await fsp.unlink(path.join(themeArtDir(), f)).catch(() => {});
@@ -1123,6 +1163,118 @@ async function playProfile(opts, progress, started) {
   return { server, slot, game: check.game, output, emuhawkPid: emu.pid, clientPid: cl.pid };
 }
 
+/* ---------------- ArchipelagoVic's own updates ---------------- */
+// Installed and portable copies update from the latest GitHub release of APP_REPO; a copy run from a git
+// checkout updates with "git pull". APVIC_UPDATE_API (tests only) points the release lookup at another server.
+const APP_REPO = "vicmi96/ArchipelagoVic";
+const UPDATE_API = (process.env.APVIC_UPDATE_API || "https://api.github.com").replace(/\/$/, "");
+let selfUpdating = false;
+let launchAfterQuit = null;   // a new portable copy to start once this one has quit
+function installKind() {
+  if (process.env.PORTABLE_EXECUTABLE_FILE) return "portable";
+  if (app.isPackaged) return "installed";
+  return fs.existsSync(path.join(__dirname, ".git")) ? "git" : "source";
+}
+function runIn(cwd, exe, args, timeout = 120000) {
+  return new Promise((resolve, reject) => execFile(exe, args, { cwd, windowsHide: true, timeout, maxBuffer: 8 << 20, shell: /\.cmd$/i.test(exe) },
+    (err, stdout, stderr) => err ? reject(new Error(String(stderr || err.message).trim().split(/\r?\n/).filter(Boolean).pop() || err.message)) : resolve(String(stdout).trim())));
+}
+const git = (args, timeout) => runIn(__dirname, "git", args, timeout);
+async function releaseJson(pathname) {
+  const r = await net.fetch(`${UPDATE_API}${pathname}`, { headers: { "User-Agent": `ArchipelagoVic/${app.getVersion()}`, Accept: "application/vnd.github+json" } });
+  if (r.status === 404) return null;
+  if (r.status === 403 || r.status === 429) throw new Error("GitHub's hourly limit for update checks was reached. Try again later.");
+  if (!r.ok) throw new Error(`Couldn't reach GitHub to check for updates (${r.status}).`);
+  return r.json();
+}
+
+async function selfCheck() {
+  const kind = installKind(), current = app.getVersion();
+  const out = { kind, current, latest: null, newer: false, checked: Date.now(), repo: APP_REPO };
+  if (kind === "git") {
+    try { await git(["fetch", "--quiet", "origin"], 60000); }
+    catch (e) { throw new Error(/not recognized|ENOENT|not found/i.test(e.message) ? "Git isn't installed, so this copy can't check GitHub for updates." : `Couldn't reach GitHub: ${e.message}`); }
+    const branch = await git(["rev-parse", "--abbrev-ref", "HEAD"]);
+    const upstream = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).catch(() => null);
+    if (!upstream) { out.note = `This copy's branch (${branch}) doesn't follow a branch on GitHub, so it can't update itself.`; return out; }
+    const behind = +(await git(["rev-list", "--count", `HEAD..${upstream}`]));
+    const ahead = +(await git(["rev-list", "--count", `${upstream}..HEAD`]));
+    let latest = current; try { latest = JSON.parse(await git(["show", `${upstream}:package.json`])).version || current; } catch {}
+    const dirty = (await git(["status", "--porcelain", "--untracked-files=no"])) !== "";
+    const log = behind ? (await git(["log", "--format=%s", "-n", "12", `HEAD..${upstream}`])).split(/\r?\n/).filter(Boolean) : [];
+    return Object.assign(out, { latest, newer: behind > 0, behind, ahead, dirty, branch, upstream, notes: log.map(l => "• " + l).join("\n") });
+  }
+  const rel = await releaseJson(`/repos/${APP_REPO}/releases/latest`);
+  if (!rel) { out.note = "ArchipelagoVic has no releases on GitHub yet."; return out; }
+  const latest = String(rel.tag_name || "").replace(/^v/i, "");
+  const newer = aplib.cmpVersion(aplib.parseVersion(latest) || [0], aplib.parseVersion(current) || [0]) > 0;
+  const want = kind === "portable" ? /portable\.exe$/i : /setup.*\.exe$/i;
+  const a = (rel.assets || []).find(x => want.test(x.name));
+  Object.assign(out, { latest, newer, url: rel.html_url, name: rel.name || `ArchipelagoVic ${latest}`, published: rel.published_at, notes: String(rel.body || "").slice(0, 2000),
+    asset: a ? { name: a.name, size: a.size, url: a.browser_download_url, sha256: /^sha256:/i.test(a.digest || "") ? a.digest.slice(7).toLowerCase() : null } : null });
+  if (newer && kind === "source") out.note = "This copy wasn't downloaded with git. Download the new version from GitHub, or use the installer.";
+  else if (newer && !a) out.note = `Release ${latest} has no ${kind === "portable" ? "portable .exe" : "Setup .exe"} to download yet.`;
+  return out;
+}
+
+// Downloads a release file into the temp folder, reporting progress, and checks it against GitHub's SHA-256.
+async function downloadVerified(asset, progress) {
+  if (!asset.sha256) throw new Error("GitHub didn't publish a checksum for this download, so it can't be checked. Download it from the release page instead.");
+  if (!/^https:\/\/(github\.com|objects\.githubusercontent\.com|release-assets\.githubusercontent\.com)\//.test(asset.url) && !process.env.APVIC_UPDATE_API)
+    throw new Error("Updates are only downloaded from GitHub.");
+  const dir = path.join(app.getPath("temp"), "ArchipelagoVic-update");
+  await fsp.mkdir(dir, { recursive: true });
+  const file = path.join(dir, path.basename(asset.name));
+  const r = await net.fetch(asset.url, { headers: { "User-Agent": `ArchipelagoVic/${app.getVersion()}` } });
+  if (!r.ok || !r.body) throw new Error(`The download failed (${r.status}).`);
+  const total = +r.headers.get("content-length") || asset.size || 0;
+  const hash = require("crypto").createHash("sha256");
+  const outStream = fs.createWriteStream(file);
+  let got = 0, lastSent = 0;
+  try {
+    for await (const chunk of r.body) {
+      const b = Buffer.from(chunk);
+      hash.update(b); got += b.length;
+      if (!outStream.write(b)) await new Promise(res => outStream.once("drain", res));
+      if (Date.now() - lastSent > 250) { lastSent = Date.now(); progress("download", got, total); }
+    }
+  } finally { await new Promise(res => outStream.end(res)); }
+  progress("download", got, total);
+  const sum = hash.digest("hex");
+  if (sum !== asset.sha256) { await fsp.unlink(file).catch(() => {}); throw new Error("The download doesn't match the checksum GitHub published, so it wasn't used. Try again later."); }
+  return file;
+}
+
+async function selfInstall(progress) {
+  const u = await selfCheck();
+  if (!u.newer) throw new Error("You already have the newest ArchipelagoVic.");
+  if (u.kind === "git") {
+    if (u.dirty) throw new Error("This copy has changes that aren't committed, so git can't update it. Commit or put them aside first.");
+    if (u.ahead) throw new Error(`This copy has ${u.ahead} commit${u.ahead === 1 ? "" : "s"} that GitHub doesn't have, so it can't simply be moved forward. Push or merge first.`);
+    progress("pull");
+    const before = await git(["rev-parse", "HEAD"]);
+    await git(["pull", "--ff-only", "--quiet"], 120000);
+    const changed = (await git(["diff", "--name-only", before, "HEAD"])).split(/\r?\n/);
+    if (changed.some(f => /^package(-lock)?\.json$/.test(f))) { progress("npm"); await runIn(__dirname, IS_WIN ? "npm.cmd" : "npm", ["install", "--no-audit", "--no-fund"], 600000); }
+    progress("restart");
+    app.relaunch();
+    return { kind: u.kind, latest: u.latest, restarting: true };
+  }
+  if (u.kind === "source") throw new Error(u.note);
+  if (!u.asset) throw new Error(u.note || "There's nothing to download for this release.");
+  const file = await downloadVerified(u.asset, progress);
+  progress("start");
+  if (u.kind === "installed") {
+    // The installer's own update mode: silent, over this install, and it starts ArchipelagoVic again when done.
+    spawn(file, ["--updated", "/S", "--force-run"], { detached: true, stdio: "ignore", windowsHide: false }).unref();
+  } else {
+    const target = path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.env.PORTABLE_EXECUTABLE_FILE), path.basename(u.asset.name));
+    if (path.resolve(target) !== path.resolve(process.env.PORTABLE_EXECUTABLE_FILE || "")) await fsp.copyFile(file, target);
+    launchAfterQuit = target;   // started as this copy exits; started now, it would find this copy still running and close
+  }
+  return { kind: u.kind, latest: u.latest, restarting: true };
+}
+
 /* ---------------- mini window ---------------- */
 function createMini() {
   const b = config.miniBounds || { width: 320, height: 300 };
@@ -1190,6 +1342,10 @@ function createWindow() {
   if (config.maximized) win.maximize();
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   win.on("focus", () => win.flashFrame(false));
+  // Ctrl+Q anywhere in the window (room tabs included) asks the window to quit; it confirms if rooms or a server would be cut off.
+  win.webContents.on("before-input-event", (e, input) => {
+    if (input.type === "keyDown" && (input.control || input.meta) && !input.alt && !input.shift && input.key.toLowerCase() === "q") { e.preventDefault(); send("app:quitAsk"); }
+  });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: "deny" }; });
   win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("file://")) { e.preventDefault(); if (/^https:\/\//.test(url)) shell.openExternal(url); } });
   win.on("close", (e) => {
@@ -1202,7 +1358,7 @@ function createWindow() {
       win.hide();
       if (!config.trayHintShown && IS_WIN) {
         config.trayHintShown = true; saveConfig();
-        try { tray.displayBalloon({ iconType: "info", title: "ArchipelagoVic is still running", content: "Your rooms stay connected. Click this icon to open it again, or right-click it to quit." }); } catch {}
+        try { tray.displayBalloon({ iconType: "info", title: "ArchipelagoVic is still running", content: "Your rooms stay connected. Click this icon to open it again. To quit, right-click it or use Quit at the bottom of the sidebar." }); } catch {}
       }
       return;
     }
@@ -1257,4 +1413,10 @@ else {
 }
 app.on("before-quit", () => { quitting = true; });
 app.on("will-quit", () => { for (const r of logicProcs.values()) { try { r.child.stdin.end("quit\n"); } catch {} killTree(r.child); } });
+// A portable update: start the new copy as this one exits, with the same options, once this copy no longer holds the one-copy lock.
+app.on("quit", () => {
+  if (!launchAfterQuit) return;
+  try { app.releaseSingleInstanceLock(); } catch {}
+  try { spawn(launchAfterQuit, process.argv.slice(1), { detached: true, stdio: "ignore", cwd: path.dirname(launchAfterQuit) }).unref(); } catch {}
+});
 app.on("window-all-closed", () => app.quit());

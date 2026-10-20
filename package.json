@@ -1,7 +1,7 @@
 {
   "name": "archipelagovic",
   "productName": "ArchipelagoVic",
-  "version": "2.6.2",
+  "version": "2.8.0",
   "description": "Archipelago launcher and text client in one window",
   "main": "main.js",
   "author": "Vic",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron .",
     "standalone": "node tools/build-standalone.js",
-    "dist": "npx --yes electron-builder@26.15.3 --win nsis portable"
+    "dist": "npx --yes electron-builder@26.15.3 --win nsis portable --publish never"
   },
   "devDependencies": {
     "electron": "44.4.5"
@@ -26,6 +26,13 @@
       "game-art.json",
       "renderer/**/*",
       "logic/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "theme-pictures",
+        "to": "theme-pictures",
+        "filter": ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.avif", "README.txt"]
+      }
     ],
     "directories": {
       "output": "dist"
@@ -43,7 +50,8 @@
       "createDesktopShortcut": true,
       "shortcutName": "ArchipelagoVic",
       "installerIcon": "renderer/icon.ico",
-      "uninstallerIcon": "renderer/icon.ico"
+      "uninstallerIcon": "renderer/icon.ico",
+      "artifactName": "ArchipelagoVic-Setup-${version}.exe"
     },
     "portable": {
       "artifactName": "ArchipelagoVic-${version}-portable.exe"

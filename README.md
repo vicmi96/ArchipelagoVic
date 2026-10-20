@@ -45,6 +45,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **One tab per room.** Play several games at once, each with its own unread count and ★ waiting items. Open rooms come back the next time you start the app.
 - **Mini window** that stays on top of borderless-fullscreen games and shows every room's checks and the latest items you got.
 - **Lives in the tray.** Closing the window keeps your rooms connected. You can turn this off in Settings.
+- **Quit** at the bottom of the sidebar (or Ctrl+Q) really closes ArchipelagoVic. If you're in a room or hosting a server, it asks first.
 
 **One-click Play for BizHawk games** (Pokémon Red and Blue, and other games the BizHawk Client plays)
 - **Set a game up once** in Games: where EmuHawk.exe is and your original ROM. ArchipelagoVic checks every path and the ROM's MD5. If the ROM is wrong, it says why in plain words (another version or region, already patched, a hack or a bad dump) and what to do.
@@ -71,6 +72,10 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **Clients & tools:** every game client, tool and adjuster in your install, including ones custom worlds add. Python-only clients start inside Archipelago's own runtime, with no Launcher window.
 - **Patch files and `archipelago://` links** open straight into the right client.
 - **Update checks** for Archipelago and your custom worlds.
+- **ArchipelagoVic updates itself.** It looks for a new version when it starts (at most every 12 hours; you can turn this off in Settings) and shows it in Home → Updates. **Update…** then does the rest:
+  - **installed copy:** downloads the new installer from GitHub, checks it against GitHub's checksum, installs it and restarts;
+  - **portable copy:** downloads the new portable `.exe` next to the old one, checks it and starts it;
+  - **copy run from a git checkout:** runs `git pull` (and `npm install` when needed) and restarts. It refuses if you have uncommitted changes.
 - **Game icons and summaries** (from Steam, SteamGridDB and Wikipedia).
 - **17 colour themes** (Settings → Theme):
   - general ones: Archipelago with Auto/Light/Dark, Midnight, Parchment, Forest, Rosé and High contrast;
@@ -82,7 +87,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 
 ### Option 1: installer
 
-Download **`ArchipelagoVic Setup <version>.exe`** from the [Releases page](https://github.com/vicmi96/ArchipelagoVic/releases) and run it. The portable `.exe` from the same page runs without installing.
+Download **`ArchipelagoVic-Setup-<version>.exe`** from the [Releases page](https://github.com/vicmi96/ArchipelagoVic/releases) and run it. The portable `.exe` from the same page runs without installing.
 
 Windows SmartScreen may warn the first time because the installer isn't code-signed. Choose **More info → Run anyway**.
 
@@ -150,11 +155,22 @@ npm start
 ```
 
 **Build the installer:** double-click **`Build installer.cmd`**, or run `npm run dist`. It writes these to `dist\`:
-- `ArchipelagoVic Setup <version>.exe` (installer);
+- `ArchipelagoVic-Setup-<version>.exe` (installer);
 - `ArchipelagoVic-<version>-portable.exe` (portable);
 - `win-unpacked\` (the unpacked app).
 
+The build includes everything ArchipelagoVic needs:
+- the Games patch helper and the built-in Universal Tracker (`logic\`);
+- the theme pictures, inside the app's `resources\theme-pictures`. A `theme-pictures` folder next to the `.exe` can still override them.
+
 `dist\` and `node_modules\` are in `.gitignore` because they're over GitHub's 100 MB file limit. To share a build, attach the Setup `.exe` to a [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) instead.
+
+**Publishing an update:**
+1. Bump `version` in `package.json` and build.
+2. On GitHub, create a release whose tag is that version (for example `v2.8.0`).
+3. Attach `ArchipelagoVic-Setup-<version>.exe` and `ArchipelagoVic-<version>-portable.exe` to it.
+
+Installed and portable copies find the new release by themselves; copies run from git update from `main`. GitHub publishes a SHA-256 checksum for every attached file, and ArchipelagoVic only installs a download that matches it.
 
 **Rebuild the browser-only client:** `npm run standalone` regenerates `ArchipelagoClient.html` from `renderer/`.
 

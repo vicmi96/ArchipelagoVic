@@ -129,6 +129,27 @@ function showView(v){
   ({ home:renderHome, games:renderGames, host:refreshHost, generate:refreshPlayers, worlds:refreshWorlds, tools:renderTools, settings:loadSettings })[v]?.();
 }
 
+/* ---------- Quit ---------- */
+// Closing the window only hides ArchipelagoVic in the tray; this really quits.
+// It asks first only when something would be cut off: connected rooms, or a server you're hosting.
+let quitAsking = false;
+async function quitArchipelagoVic(){
+  if (quitAsking) return;
+  const rooms = connectedRooms().length, server = !!L.server.id;
+  if (rooms || server){
+    quitAsking = true;
+    const text = [
+      server ? "The server you're hosting stops and everyone is disconnected. Progress is saved." : null,
+      rooms ? `You leave ${rooms === 1 ? "your room" : `your ${rooms} rooms`}. ${rooms === 1 ? "It opens" : "They open"} again the next time you start ArchipelagoVic.` : null,
+      "Games you started from Games keep running.",
+    ].filter(Boolean).join(" ");
+    const ok = await askConfirm("Quit ArchipelagoVic?", text, server ? "Stop server and quit" : "Quit");
+    quitAsking = false;
+    if (!ok) return;
+  }
+  await attempt(() => API.quit(true));
+}
+
 /* ---------- small helpers ---------- */
 async function attempt(fn, okMsg){
   try { const r = await fn(); if (okMsg) toast(typeof okMsg === "function" ? okMsg(r) : okMsg); return r; }
@@ -156,6 +177,8 @@ async function initLauncher(){
   API.onProcData(onProcData);
   API.onProcExit(onProcExit);
   wireHost(); wireGenerate(); wireWorlds(); wireTools(); wireGames(); wireSettings(); initRooms();
+  $("#railQuit").addEventListener("click", quitArchipelagoVic);
+  API.onQuitAsk(quitArchipelagoVic);   // Ctrl+Q, from anywhere in the window (also inside a room tab)
   API.onUri(u => handleUri(u));
   document.addEventListener("dragover", e => e.preventDefault());
   document.addEventListener("drop", e => {   // drop a patch file anywhere outside a drop zone
@@ -172,6 +195,7 @@ async function initLauncher(){
   await loadInfo();
   showView("home");
   try { const u = await API.pendingUri(); if (u) handleUri(u); } catch {}
+  refreshSelf(false, true);   // ArchipelagoVic's own updates (also without Archipelago installed)
   if (L.info?.found) refreshUpdates(false);
   API.onMiniState(on => $("#miniToggle").classList.toggle("on", !!on));
 }
@@ -217,24 +241,105 @@ function renderHome(){
 
 /* ---------- updates ---------- */
 async function refreshUpdates(force){
-  if (!L.info?.found) return;
   const box = $("#homeUpdates");
+  if (!L.info?.found){ renderUpdates(); return; }
   if (force) box.replaceChildren(h("li",{class:"muted"},"Checking…"));
-  let u; try { u = await API.checkUpdates(!!force); } catch (e) { box.replaceChildren(h("li",{class:"muted"}, "Couldn't check: " + e.message)); return; }
-  L.updates = u;
+  try { L.updates = await API.checkUpdates(!!force); L.updatesError = null; } catch (e) { L.updatesError = "Couldn't check: " + e.message; }
+  renderUpdates();
+  if (L.view === "worlds") refreshWorlds();
+}
+// Home → Updates: ArchipelagoVic itself first, then Archipelago and your custom worlds.
+function renderUpdates(){
+  const box = $("#homeUpdates");
+  const u = L.updates || { worlds: [] };
   const rows = [];
+  const s = L.self;
+  if (s?.newer) rows.push(h("li",null, h("img",{class:"gicon", src:"icon.png", alt:""}),
+    h("span",{class:"grow"}, h("b",null, `ArchipelagoVic ${s.latest}`), s.kind === "git" ? ` · ${s.behind} new change${s.behind === 1 ? "" : "s"} on GitHub.` : ` is out (you have ${s.current}).`),
+    (s.kind === "git" || s.asset) ? h("button",{class:"btn small primary", type:"button", onclick:() => openSelfUpdate(s)}, "Update…") : h("a",{class:"btn small", href:s.url || `https://github.com/${s.repo}/releases`, "data-ext":""}, "Get it")));
+  if (L.updatesError) rows.push(h("li",{class:"muted"}, L.updatesError));
   if (u.archipelago?.newer) rows.push(h("li",null, gameIcon("Archipelago"), h("span",{class:"grow"}, h("b",null,`Archipelago ${u.archipelago.latest}`), ` is out (you have ${u.archipelago.current}).`),
     h("a",{class:"btn small", href:u.archipelago.url, "data-ext":""}, "Get it")));
   for (const w of u.worlds.filter(x => x.newer)) rows.push(h("li",null, gameIcon(w.game || w.module), h("span",{class:"grow"}, h("b",null, w.game || w.module), ` ${w.tag} is out.`),
     h("button",{class:"btn small primary", type:"button", onclick:() => updateWorld(w)}, "Update")));
-  const when = new Date(u.checked).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+  const checked = u.checked || s?.checked;
+  const when = checked ? new Date(checked).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) : null;
   if (u.errors?.length) rows.push(h("li",{class:"muted"}, u.errors[0]));
-  else if (!rows.length) rows.push(h("li",{class:"muted"}, `Everything is up to date. Checked ${when}.`));
-  const ver = [u.app ? `ArchipelagoVic ${u.app}` : null, u.archipelago ? `Archipelago ${u.archipelago.current}` : L.info?.version ? `Archipelago ${L.info.version}` : null].filter(Boolean).join(" · ");
+  else if (L.selfError) rows.push(h("li",{class:"muted"}, L.selfError));
+  else if (!rows.length) rows.push(h("li",{class:"muted"}, when ? `Everything is up to date. Checked ${when}.` : "Not checked yet."));
+  const ver = [s?.current || u.app ? `ArchipelagoVic ${s?.current || u.app}` : null, u.archipelago ? `Archipelago ${u.archipelago.current}` : L.info?.version ? `Archipelago ${L.info.version}` : null].filter(Boolean).join(" · ");
   if (ver) rows.push(h("li",{class:"muted small-note"}, ver));
-  rows.push(h("li",null, h("button",{class:"linkish", type:"button", onclick:() => refreshUpdates(true)}, "Check now")));
+  rows.push(h("li",null, h("button",{class:"linkish", type:"button", onclick:() => { refreshSelf(true); refreshUpdates(true); }}, "Check now")));
   box.replaceChildren(...rows);
-  if (L.view === "worlds") refreshWorlds();
+}
+
+/* ---------- ArchipelagoVic's own updates ---------- */
+// startup: the check when the app opens (skipped when turned off in Settings; at most every 12 hours).
+async function refreshSelf(force, startup){
+  if (force) $("#sSelfState").textContent = "Checking for ArchipelagoVic updates…";
+  try { L.self = await API.selfCheck(!!force, !!startup); L.selfError = null; }
+  catch (e) { L.selfError = e.message; if (force && L.view === "settings") toast(e.message); }
+  renderSelfSettings(); renderUpdates();
+  if (startup && L.self?.newer && !L.self.skipped) toast(`ArchipelagoVic ${L.self.latest} is available. See Home → Updates.`);
+}
+const SELF_HOW = {
+  installed: "This copy is installed; it updates from ArchipelagoVic's releases on GitHub.",
+  portable: "This is the portable copy; it updates from ArchipelagoVic's releases on GitHub.",
+  git: "This copy runs from a git checkout; it updates with git pull from GitHub.",
+  source: "This copy runs from downloaded source files; get new versions from GitHub.",
+};
+function renderSelfSettings(){
+  const st = $("#sSelfState"); if (!st) return;
+  const u = L.self;
+  if (L.selfError) st.textContent = L.selfError;
+  else if (!u || u.skipped && !u.checked) st.textContent = `${u ? SELF_HOW[u.kind] + " " : ""}Not checked yet.`;
+  else if (u.newer) st.textContent = `ArchipelagoVic ${u.latest} is available (you have ${u.current}). ${u.note || SELF_HOW[u.kind]}`;
+  else st.textContent = `${u.note || `You have the newest ArchipelagoVic (${u.current}).`} ${u.note ? "" : SELF_HOW[u.kind]} Checked ${fmtWhen(u.checked)}.`.replace(/\s+/g, " ");
+  $("#sSelfUpdate").classList.toggle("hidden", !(u?.newer && (u.kind === "git" || u.asset)));
+  $("#sSelfAuto").checked = u?.auto !== false;
+}
+// The update sheet: what will happen, what's new, then progress until ArchipelagoVic restarts.
+function openSelfUpdate(u){
+  const d = $("#sheetDlg");
+  if (d.open) return;
+  const rooms = connectedRooms().length, server = !!L.server.id;
+  const how = u.kind === "git"
+    ? `Runs git pull to get ${u.behind} new change${u.behind === 1 ? "" : "s"} from GitHub, installs new npm packages if any, then restarts ArchipelagoVic.`
+    : u.kind === "portable"
+      ? `Downloads ${u.asset.name} (${fmtSize(u.asset.size)}) from GitHub next to this copy, checks it against GitHub's checksum and starts it. You can delete the old .exe afterwards.`
+      : `Downloads ${u.asset.name} (${fmtSize(u.asset.size)}) from GitHub, checks it against GitHub's checksum, installs it over this copy and starts ArchipelagoVic again.`;
+  const cut = [server ? "The server you're hosting stops. Progress is saved." : null, rooms ? `${rooms === 1 ? "Your room disconnects and opens" : `Your ${rooms} rooms disconnect and open`} again after the restart.` : null].filter(Boolean).join(" ");
+  const status = h("p",{class:"small-note", "aria-live":"polite"});
+  const bar = h("progress",{class:"self-bar hidden", max:"1", value:"0"});
+  const go = h("button",{class:"btn primary", type:"button"}, "Update and restart");
+  const cancel = h("button",{class:"btn", value:""}, "Cancel");
+  const x = $("#sheetDlg .guide-head button");
+  let busy = false;
+  go.addEventListener("click", async () => {
+    busy = true; go.disabled = cancel.disabled = x.disabled = true;
+    status.className = "small-note"; status.textContent = "Starting…";
+    const off = API.onSelfProgress(p => {
+      if (p.stage === "download"){ bar.classList.remove("hidden"); if (p.total){ bar.max = p.total; bar.value = p.got; } status.textContent = `Downloading… ${fmtSize(p.got)}${p.total ? ` of ${fmtSize(p.total)}` : ""}`; }
+      else status.textContent = { pull: "Getting the changes (git pull)…", npm: "Installing new packages (npm install)…",
+        start: u.kind === "installed" ? "Checked. Installing; ArchipelagoVic closes now and opens again by itself in a moment." : "Checked. Starting the new version…",
+        restart: "Restarting ArchipelagoVic…" }[p.stage] || status.textContent;
+    });
+    try { await API.selfInstall(); }
+    catch (e) { status.className = "small-note problem"; status.textContent = e.message; go.textContent = "Try again"; busy = false; go.disabled = cancel.disabled = x.disabled = false; }
+    finally { off(); }
+  });
+  $("#sheetTitle").textContent = "Update ArchipelagoVic";
+  $("#sheetBody").replaceChildren(h("div",{class:"play-sheet"},
+    h("div",{class:"sheet-head"}, h("img",{class:"gicon xl", src:"icon.png", alt:""}), h("div",null, h("b",null, `ArchipelagoVic ${u.latest}`), h("div",{class:"muted"}, `You have ${u.current}${u.published ? ` · released ${fmtWhen(Date.parse(u.published))}` : ""}`))),
+    h("dl",{class:"kv"}, h("dt",null,"What happens"), h("dd",null, how), cut ? [h("dt",null,"Before you update"), h("dd",null, cut)] : null),
+    u.notes ? h("details",{class:"more", open:true}, h("summary",null, u.kind === "git" ? "Changes" : "What's new"), h("pre",{class:"self-notes"}, u.notes)) : null,
+    bar, status));
+  $("#sheetActions").replaceChildren(cancel, go);
+  d.onclose = null;
+  d.oncancel = e => { if (busy) e.preventDefault(); };
+  d.returnValue = "";
+  d.showModal();
+  go.focus();
 }
 async function updateWorld(w){
   if (!(await askConfirm(`Update ${w.game || w.module}?`, `Downloads ${w.assetName} (${w.tag}) from github.com/${w.repo} and replaces your installed copy. Restart any open Archipelago programs afterwards.`, "Update"))) return;
@@ -789,6 +894,9 @@ function wireSettings(){
   });
   $("#sHostRevert").addEventListener("click", () => { $("#sHost").value = hostOriginal; });
   $("#sAlerts").addEventListener("click", openAlerts);
+  $("#sSelfCheck").addEventListener("click", () => refreshSelf(true));
+  $("#sSelfUpdate").addEventListener("click", () => L.self && openSelfUpdate(L.self));
+  $("#sSelfAuto").addEventListener("change", e => attempt(() => API.selfSetAuto(e.target.checked), on => { if (L.self) L.self.auto = on; return on ? "ArchipelagoVic will look for updates when it starts." : "ArchipelagoVic won't look for updates by itself. Use Check for updates."; }));
   $("#sSgdbSave").addEventListener("click", async () => {
     const k = $("#sSgdb").value.trim();
     const r = await attempt(() => API.setSgdbKey(k), on => on ? "SteamGridDB key saved. Missing icons will be looked up again." : "SteamGridDB key removed.");
@@ -803,7 +911,8 @@ function wireSettings(){
 }
 async function loadSettings(){
   loadThemeFolder().then(renderThemeUI);   // picks up pictures added to the theme-pictures folder
-  $("#sAbout").textContent = "ArchipelagoVic 2.0. Joining games works without Archipelago installed; everything else uses your install.";
+  $("#sAbout").textContent = `ArchipelagoVic ${L.self?.current || ""}. Joining games works without Archipelago installed; everything else uses your install.`.replace("  ", " ");
+  renderSelfSettings();
   $("#sArt").checked = L.info?.artOnline !== false;
   $("#sTray").checked = L.info?.closeToTray !== false;
   $("#sSgdb").placeholder = L.info?.hasSgdbKey ? "Key saved (paste a new one to replace it)" : "SteamGridDB API key";
