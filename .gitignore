@@ -11,10 +11,6 @@ desktop.ini
 .DS_Store
 *.log
 
-# Your own theme pictures (only the instructions file is shared).
-theme-pictures/*
-!theme-pictures/README.txt
-
 # Game ROMs must never be committed (they are copyrighted and belong to you only).
 ROM/
 *.gb

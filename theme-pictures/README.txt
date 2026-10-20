@@ -22,5 +22,6 @@ Either file name works for a theme:
   Attack on Titan        aot.png  or  attack-on-titan.png
   Spy × Family           spyfamily.png  or  spy-family.png
 
-This folder is in .gitignore, so these pictures stay on your PC and are never pushed to GitHub.
+The pictures that come in this folder are original drawings by the author of ArchipelagoVic, shared with the project.
+Replace any of them with your own by saving a picture with the same name here.
 A picture chosen with "Choose picture..." in Settings takes priority over the one in this folder.

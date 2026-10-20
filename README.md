@@ -76,7 +76,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
   - general ones: Archipelago with Auto/Light/Dark, Midnight, Parchment, Forest, Rosé and High contrast;
   - palettes inspired by anime: Frieren, Fullmetal Alchemist, One Piece, Naruto, Demon Slayer, Jujutsu Kaisen, Evangelion, Sailor Moon, Cowboy Bebop, Attack on Titan and Spy × Family.
 
-  Every theme recolours the whole app, room tabs and the mini window, and keeps item colours meaning the same thing. You can give any theme your own picture (a favourite character, fan art…), shown at the bottom of the sidebar. Use "Choose picture…" in Settings, or drop images named after the themes (`frieren.png`, `one-piece.jpg`…) into the `theme-pictures` folder; `theme-pictures/README.txt` lists the names. That folder is git-ignored, so your pictures stay on your PC.
+  Every theme recolours the whole app, room tabs and the mini window, and keeps item colours meaning the same thing. You can give any theme your own picture (a favourite character, fan art…), shown at the bottom of the sidebar. Use "Choose picture…" in Settings, or drop images named after the themes (`frieren.png`, `one-piece.jpg`…) into the `theme-pictures` folder; `theme-pictures/README.txt` lists the names. The anime themes come with original drawings by the author in that folder; save your own picture under the same name to replace one.
 
 ## Install
 
@@ -198,6 +198,7 @@ renderer/
 tools/build-standalone.js   Builds ArchipelagoClient.html
 Changes/                    Timestamped patch notes for every change
 docs/screenshots/           Images used in this README
+theme-pictures/             Theme pictures (original drawings by the author) and the file names each theme uses
 ROM/                        Your own ROMs for testing (git-ignored: ROMs are never committed)
 ```
 
