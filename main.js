@@ -238,7 +238,7 @@ async function uniqueTarget(dir, fileName) {
 /* ---------------- IPC ---------------- */
 function handle(channel, fn) {
   ipcMain.handle(channel, async (_e, ...args) => {
-    try { return { ok: true, value: await fn(...args) }; }
+    try { return { ok: true, value: await fn.apply(_e, args) }; }   // regular functions get the IPC event as `this`
     catch (e) { return { ok: false, error: e.message || String(e) }; }
   });
 }
@@ -538,7 +538,10 @@ function registerIpc() {
   });
   handle("app:copy", async (text) => { require("electron").clipboard.writeText(String(text)); return true; });
   // ---- update checks (GitHub releases) ----
-  const DEFAULT_REPOS = { oni: "ShadowKitty42/ONI-Archipelago" };
+  const UT_REPO = "FarisTheAncient/Archipelago";
+  const DEFAULT_REPOS = { oni: "ShadowKitty42/ONI-Archipelago", tracker: UT_REPO };
+  // Projects that publish several things from one repository: only releases whose tag starts like this count.
+  const TAG_PREFIX = { [UT_REPO]: /^Tracker_v/i };
   const repos = () => ({ ...DEFAULT_REPOS, ...(config.worldRepos || {}) });
   const gh = async (pathname) => {
     const r = await net.fetch(`https://api.github.com${pathname}`, { headers: { "User-Agent": "ArchipelagoVic/2.3", Accept: "application/vnd.github+json" } });
@@ -546,6 +549,12 @@ function registerIpc() {
     if (r.status === 404) return null;
     if (!r.ok) throw new Error(`Couldn't reach GitHub to check for updates (${r.status}).`);
     return r.json();
+  };
+  const latestRelease = async (repo, assetRe = /\.apworld$/i) => {
+    const prefix = TAG_PREFIX[repo];
+    if (!prefix) return gh(`/repos/${repo}/releases/latest`);
+    const list = await gh(`/repos/${repo}/releases?per_page=30`);
+    return (list || []).find(r => !r.draft && !r.prerelease && prefix.test(r.tag_name || "") && (r.assets || []).some(a => assetRe.test(a.name))) || null;
   };
   async function checkUpdates() {
     const base = requireAp();
@@ -570,7 +579,7 @@ function registerIpc() {
       const w = { module: mod, file: n, game, version, repo: repo || null };
       if (repo && st) {
         try {
-          const rel = await gh(`/repos/${repo}/releases/latest`);
+          const rel = await latestRelease(repo);
           const asset = rel && (rel.assets || []).find(a => a.name === n) || rel && (rel.assets || []).find(a => /\.apworld$/i.test(a.name));
           if (asset) Object.assign(w, { tag: rel.tag_name, releaseUrl: rel.html_url, published: rel.published_at, assetUrl: asset.browser_download_url, assetName: asset.name,
             newer: asset.size !== st.size && Date.parse(asset.updated_at || rel.published_at) > st.mtimeMs - 864e5 });
@@ -611,6 +620,63 @@ function registerIpc() {
       return { module: mod, game: info.game, version: info.worldVersion, tag: w.tag, warnings: info.warnings };
     } finally { fsp.unlink(tmp).catch(() => {}); }
   });
+  // ---- what's in logic (runs Universal Tracker's logic through the ArchipelagoVic Logic helper) ----
+  handle("logic:status", async () => {
+    const base = requireAp();
+    return { ut: utInstalled(base), debugExe: fs.existsSync(debugLauncher(base)) };
+  });
+  // Repair: Universal Tracker is installed but won't load (usually too old or too new for this Archipelago).
+  handle("logic:installUT", async () => { await installBundledUT(requireAp(), true); return { tag: BUNDLED_UT_VERSION }; });
+  handle("logic:chooseYaml", async function () {
+    const owner = BrowserWindow.fromWebContents(this.sender) || win;
+    const f = await folders().catch(() => null);
+    const r = await dialog.showOpenDialog(owner, { title: "Choose your player YAML", defaultPath: f?.players, properties: ["openFile"], filters: [{ name: "Player YAML", extensions: ["yaml", "yml"] }] });
+    return r.canceled ? null : r.filePaths[0];
+  });
+  handle("logic:start", async function (opts = {}) {
+    const frame = this.senderFrame;
+    const base = requireAp();
+    const exe = debugLauncher(base);
+    if (!fs.existsSync(exe)) throw new Error("Your Archipelago install has no ArchipelagoLauncherDebug.exe, which this needs. Reinstall Archipelago 0.6.2 or newer.");
+    if (!utInstalled(base)) await installBundledUT(base, false);   // built in: set up silently the first time
+    const server = String(opts.server || "").trim(), slot = String(opts.slot || "").trim();
+    if (!server || !slot) throw new Error("Connect to a room first.");
+    await ensureBridge(base);
+    const yaml = await findSlotYaml(slot, opts.yamlFile || null);
+    const tmp = await fsp.mkdtemp(path.join(app.getPath("temp"), "apvic-logic-"));
+    if (yaml) await fsp.writeFile(path.join(tmp, "player.yaml"), yaml.text, "utf8");
+    const args = ["ArchipelagoVic Logic", "--", "--nogui", "--connect", server, "--name", slot, "--yaml-dir", tmp];
+    if (opts.password) args.push("--password", String(opts.password));
+    const id = logicSeq++;
+    const child = spawn(exe, args, { cwd: base, env: childEnv(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const rec = { id, child, frame, buf: "", tmp, tail: [] };
+    logicProcs.set(id, rec);
+    const deliver = msg => {
+      try { if (frame.isDestroyed?.() || frame.detached) throw 0; frame.send("logic:data", { id, ...msg }); }
+      catch { stopLogic(id); }
+    };
+    const keep = line => { if (line.trim()) { rec.tail.push(line.slice(0, 500)); if (rec.tail.length > 40) rec.tail.shift(); } };
+    child.stdout.on("data", d => {
+      rec.buf += d.toString("utf8");
+      let i;
+      while ((i = rec.buf.indexOf("\n")) >= 0) {
+        const line = rec.buf.slice(0, i).replace(/\r$/, ""); rec.buf = rec.buf.slice(i + 1);
+        if (line.startsWith("APVIC ")) { try { deliver(JSON.parse(line.slice(6))); } catch {} }
+        else keep(line);
+      }
+    });
+    child.stderr.on("data", d => d.toString("utf8").split(/\r?\n/).forEach(keep));
+    child.on("error", e => deliver({ type: "error", code: "spawn", text: `Couldn't start Archipelago: ${e.message}` }));
+    child.on("exit", code => {
+      logicProcs.delete(id);
+      fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
+      if (!rec.stopping) deliver({ type: "exit", code, tail: rec.tail.slice(-15).join("\n") });
+    });
+    return { id, yaml: yaml ? { file: yaml.file, name: yaml.name } : null };
+  });
+  handle("logic:stop", async (id) => { stopLogic(id); return true; });
+  handle("logic:refresh", async (id) => { const r = logicProcs.get(id); try { r?.child.stdin.write("refresh\n"); } catch {} return !!r; });
+
   handle("mini:toggle", async () => { if (mini && !mini.isDestroyed()) { mini.close(); return false; } createMini(); return true; });
   handle("mini:update", async (data) => { miniData = data || { rooms: [] }; updateTrayMenu(); if (mini && !mini.isDestroyed()) mini.webContents.send("mini:data", miniData); return true; });
   handle("mini:get", async () => miniData);
@@ -623,6 +689,90 @@ function killTree(child) {
   if (IS_WIN) { try { spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }); } catch {} }
   else { try { child.kill("SIGTERM"); } catch {} }
 }
+
+/* ---------------- in-logic helper ---------------- */
+const logicProcs = new Map();   // id -> { child, frame, tmp, tail }
+let logicSeq = 1;
+const debugLauncher = base => path.join(base, "ArchipelagoLauncherDebug.exe");
+// Universal Tracker (MIT, by FarisTheAncient) ships inside ArchipelagoVic; see logic/universal-tracker/LICENSE.txt.
+const BUNDLED_UT = path.join(__dirname, "logic", "universal-tracker", "tracker.apworld");
+const BUNDLED_UT_VERSION = "v0.3.5";
+function utFiles(base) {
+  try { return fs.readdirSync(path.join(base, "custom_worlds")).filter(n => /^tracker\b.*\.apworld$/i.test(n)); } catch { return []; }
+}
+async function installBundledUT(base, replace) {
+  const dir = path.join(base, "custom_worlds");
+  await fsp.mkdir(dir, { recursive: true });
+  const data = await fsp.readFile(BUNDLED_UT);
+  const existing = utFiles(base);
+  if (existing.length && !replace) return;
+  // Replace the copy that failed to load in place (one tracker world only), keeping a backup Archipelago won't load.
+  for (const n of existing.slice(1)) await fsp.rename(path.join(dir, n), path.join(dir, n + ".bak")).catch(() => {});
+  const target = path.join(dir, existing[0] || "tracker.apworld");
+  if (existing[0]) await fsp.copyFile(target, target + ".bak").catch(() => {});
+  await fsp.writeFile(target, data);
+  customComps = await scanCustomComponents(dir).catch(() => customComps);
+}
+function utInstalled(base) {
+  // Universal Tracker installs as custom_worlds/tracker.apworld (sometimes renamed, e.g. "tracker (1).apworld").
+  const cw = path.join(base, "custom_worlds");
+  let names = [];
+  try { names = fs.readdirSync(cw); } catch {}
+  return names.some(n => /^tracker\b.*\.apworld$/i.test(n)) || fs.existsSync(path.join(cw, "tracker", "__init__.py")) || fs.existsSync(path.join(base, "lib", "worlds", "tracker"));
+}
+// The helper ships as plain files in logic/ and is packed into custom_worlds/apvic_logic.apworld when it's missing or out of date.
+function bridgeZip() {
+  const dir = path.join(__dirname, "logic", "apvic_logic");
+  return aplib.writeZip(["__init__.py", "bridge.py", "archipelago.json"].map(n => ({ name: `apvic_logic/${n}`, data: fs.readFileSync(path.join(dir, n)) })));
+}
+async function ensureBridge(base) {
+  const target = path.join(base, "custom_worlds", "apvic_logic.apworld");
+  const want = bridgeZip();
+  const have = await fsp.readFile(target).catch(() => null);
+  if (have && have.equals(want)) return;
+  await fsp.mkdir(path.dirname(target), { recursive: true });
+  await fsp.writeFile(target, want);
+}
+// The player YAML for a slot: from a file the person picked, or the one in the Players folder whose name matches.
+async function findSlotYaml(slot, pickedFile) {
+  const matches = (template, name) => {
+    const t = String(template || "").replace(/\s+#.*$/, "").trim().replace(/^(['"])(.*)\1$/, "$2");
+    if (!t) return false;
+    if (t === name) return true;
+    const re = new RegExp("^" + t.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{(player|PLAYER|number|NUMBER)\}/g, "\\d*") + "$");
+    return /\{(player|PLAYER|number|NUMBER)\}/.test(t) && re.test(name);
+  };
+  const docsOf = text => text.replace(/\r\n/g, "\n").split(/^---\s*$/m).filter(d => /^name:/m.test(d));
+  const pick = (file, text) => {
+    const docs = docsOf(text);
+    const doc = docs.find(d => matches((d.match(/^name:(.*)$/m) || [])[1], slot)) || (pickedFile && docs.length === 1 ? docs[0] : null);
+    if (!doc) return null;
+    // Use the exact slot name so the tracker can find this player.
+    return { file, name: slot, text: doc.replace(/^name:.*$/m, `name: ${JSON.stringify(slot)}`) };
+  };
+  if (pickedFile) {
+    const text = await fsp.readFile(pickedFile, "utf8");
+    const r = pick(pickedFile, text);
+    if (!r) throw new Error(`That file has no player named ${slot}.`);
+    return r;
+  }
+  const f = await folders().catch(() => null);
+  if (!f) return null;
+  for (const n of (await fsp.readdir(f.players).catch(() => [])).filter(n => /\.ya?ml$/i.test(n)).sort()) {
+    const text = await fsp.readFile(path.join(f.players, n), "utf8").catch(() => "");
+    const r = pick(path.join(f.players, n), text);
+    if (r) return r;
+  }
+  return null;
+}
+function stopLogic(id) {
+  const r = logicProcs.get(id);
+  if (!r) return;
+  r.stopping = true;
+  try { r.child.stdin.end("quit\n"); } catch {}
+  setTimeout(() => killTree(r.child), 4000);
+}
+function stopAllLogic() { for (const id of [...logicProcs.keys()]) stopLogic(id); }
 
 /* ---------------- mini window ---------------- */
 function createMini() {
@@ -749,4 +899,5 @@ else {
   });
 }
 app.on("before-quit", () => { quitting = true; });
+app.on("will-quit", () => { for (const r of logicProcs.values()) { try { r.child.stdin.end("quit\n"); } catch {} killTree(r.child); } });
 app.on("window-all-closed", () => app.quit());

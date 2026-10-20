@@ -265,6 +265,7 @@ function onConnected(c){
   if (firstTime) showApp(); else toast("Reconnected.");
   if (store.get("apwc.scout."+roomKey(), false)) scout();
   startTracker();
+  startLogic();
   rerenderAll();
 }
 function roomKey(){ return (S.room?.seed_name||"") + ":" + S.slot; }
@@ -340,7 +341,9 @@ function onPrint(c){
     } else if (t==="Goal" && c.slot!=null){
       parts = [{type:"player_id", text:String(c.slot)}, {type:"color", color:"bold", text:" reached their goal"}];
     }
-    addFeed({kind:"sys", sub:t||"", slot:c.slot, parts, quiet});
+    // ArchipelagoVic's own logic helper connects as you with the "Tracker" tag; that isn't news.
+    const ownHelper = (t==="Join" || t==="Part") && c.slot===S.slot && (c.tags||[]).includes("Tracker") && Logic.key;
+    if (!ownHelper) addFeed({kind:"sys", sub:t||"", slot:c.slot, parts, quiet});
   }
   if (UI.tab==="players") renderPlayers();
 }
@@ -546,26 +549,37 @@ function renderChecks(){
   const body = $("#chkBody"); body.replaceChildren();
   const ids = [...(UI.chkMode==="missing" ? S.missing : S.checked)];
   const q = UI.chkQuery;
+  renderLogicBar();
+  const logic = Logic.state === "ready" && UI.chkMode === "missing";
+  const reach = id => Logic.inLogic.has(id) ? 0 : Logic.glitched.has(id) ? 1 : 2;
   let rows = ids.map(id => ({id, name:locName(id, S.slot), sc:S.scouted.get(id)}));
+  if (logic && UI.chkLogic) rows = rows.filter(r => reach(r.id) === 0);
   if (q) rows = rows.filter(r => (r.name + (r.sc ? " "+itemName(r.sc.item,r.sc.player)+" "+pname(r.sc.player) : "")).toLowerCase().includes(q));
   const rank = f => f==null ? 9 : ({prog:0,useful:1,filler:2,trap:3})[cls(f)];
   const useCat = UI.chkCat && S.locCat.size;
-  rows.sort((a,b)=> (useCat ? catCmp(catOf(S.locCat,a.name), catOf(S.locCat,b.name)) : 0) || (revealed && UI.chkMode==="missing" ? rank(a.sc?.flags)-rank(b.sc?.flags) : 0) || a.name.localeCompare(b.name, undefined, {numeric:true}));
+  rows.sort((a,b)=> (useCat ? catCmp(catOf(S.locCat,a.name), catOf(S.locCat,b.name)) : 0) || (logic ? reach(a.id)-reach(b.id) : 0) || (revealed && UI.chkMode==="missing" ? rank(a.sc?.flags)-rank(b.sc?.flags) : 0) || a.name.localeCompare(b.name, undefined, {numeric:true}));
   if (!ids.length){
     body.append(h("div",{class:"empty"}, h("b",null, UI.chkMode==="missing" ? "Every check is done" : "No checks done yet"), UI.chkMode==="missing" ? "Nothing left to find in your world." : "Locations you check in your game appear here."));
     return;
   }
-  if (!rows.length){ body.append(h("div",{class:"empty"},h("b",null,"No matches"),"Try a different search.")); return; }
+  if (!rows.length){
+    if (logic && UI.chkLogic && !q) body.append(h("div",{class:"empty"},h("b",null,"Nothing you can reach right now"),"Wait for items from other players, or untick “Only what I can reach” to see every check."));
+    else body.append(h("div",{class:"empty"},h("b",null,"No matches"),"Try a different search."));
+    return;
+  }
   const showContents = revealed && UI.chkMode==="missing";
   const tb = h("tbody");
   let lastCat = null;
   for (const r of rows){
-    if (useCat){ const c = catOf(S.locCat, r.name); if (c!==lastCat){ lastCat=c; tb.append(h("tr",{class:"cat-h"}, h("td",{colspan: showContents?"3":"1"}, c))); } }
-    tb.append(h("tr",null, h("td",null,r.name),
+    if (useCat){ const c = catOf(S.locCat, r.name); if (c!==lastCat){ lastCat=c; tb.append(h("tr",{class:"cat-h"}, h("td",{colspan: String((showContents?3:1) + (logic?1:0))}, c))); } }
+    const rc = logic ? reach(r.id) : null;
+    tb.append(h("tr",{class: rc===2 ? "unreachable" : null},
+      logic ? h("td",{class:"reach-cell"}, h("span",{class:"reach " + ["ok","glitch","no"][rc], title:["You can reach this now","Reachable with glitches or tricks","Needs items you don't have yet"][rc]}, ["Reachable","Glitched","Not yet"][rc])) : null,
+      h("td",null,r.name),
       showContents ? h("td",null, r.sc ? itemPill(r.sc.item, r.sc.player, r.sc.flags) : h("span",{class:"muted"},"—")) : null,
       showContents ? h("td",null, r.sc ? chip(r.sc.player) : null) : null));
   }
-  body.append(h("table",{class:"grid"}, h("thead",null,h("tr",null,h("th",null,"Location"), showContents?h("th",null,"Holds"):null, showContents?h("th",null,"For"):null)), tb));
+  body.append(h("table",{class:"grid"}, h("thead",null,h("tr",null, logic ? h("th",null,"Reach") : null, h("th",null,"Location"), showContents?h("th",null,"Holds"):null, showContents?h("th",null,"For"):null)), tb));
 }
 
 /* ---------- Hints ---------- */
@@ -654,6 +668,104 @@ async function startTracker(){
   await tick();
   Track.timer = setInterval(tick, 60000);   // the website refreshes this data once a minute
 }
+/* ---------- What you can reach (Universal Tracker's logic, in the ArchipelagoVic app) ---------- */
+const Logic = { id:null, key:null, state:"off", inLogic:new Set(), glitched:new Set(), notes:[], detail:"", log:[], yaml:null, yamlFile:null, gen:0, repaired:false };
+const logicInApp = () => !!window.apvic?.logicStart;
+async function startLogic(force = false){
+  if (!logicInApp() || !S.slot) { renderLogicBar(); return; }
+  const key = `${S.server}|${S.slotName}`;
+  if (!force && Logic.id && Logic.key === key && Logic.state !== "error") return;   // already running for this room (e.g. after a reconnect)
+  stopLogic();
+  if (!store.get("apwc.logic", true)) { renderLogicBar(); return; }
+  const gen = Logic.gen;
+  Logic.yamlFile = store.get("apwc.logicYaml." + roomKey(), null);
+  Object.assign(Logic, { key, state:"starting", detail:"", log:[], notes:[] });
+  renderLogicBar();
+  try {
+    const r = await window.apvic.logicStart({ server:S.server, slot:S.slotName, password:S.password || "", yamlFile:Logic.yamlFile });
+    if (gen !== Logic.gen) { if (r?.id) window.apvic.logicStop(r.id).catch(()=>{}); return; }
+    Logic.id = r.id; Logic.yaml = r.yaml; Logic.state = "generating";
+  } catch (e) {
+    if (gen !== Logic.gen) return;
+    Logic.state = "error"; Logic.detail = e.message;
+    if (Logic.yamlFile && /no player named/i.test(e.message)) store.set("apwc.logicYaml." + roomKey(), null);
+  }
+  renderLogicBar(); refreshChecksView();
+}
+function stopLogic(){
+  Logic.gen++;
+  if (Logic.id && window.apvic?.logicStop) window.apvic.logicStop(Logic.id).catch(()=>{});
+  Object.assign(Logic, { id:null, key:null, state:"off", inLogic:new Set(), glitched:new Set(), notes:[], yaml:null });
+}
+function onLogicData(d){
+  if (!d || d.id !== Logic.id) return;
+  if (d.type === "status") Logic.state = d.stage === "generating" ? "generating" : "connecting";
+  else if (d.type === "logic") {
+    Logic.inLogic = new Set(d.inLogic || []); Logic.glitched = new Set(d.glitched || []); Logic.notes = d.notes || [];
+    if (d.disabled) Logic.state = "unsupported";
+    else if (!d.ready) { Logic.state = "error"; Logic.detail = d.genError || ""; }
+    else Logic.state = "ready";
+  }
+  else if (d.type === "log") Logic.log = [...Logic.log, d.text].slice(-8);
+  else if (d.type === "error") {
+    Logic.state = d.code === "ut-missing" ? "needs-ut" : "error"; Logic.detail = d.text || "";
+    // A Universal Tracker you installed yourself that won't load with this Archipelago: swap in the built-in one once.
+    if (d.code === "ut-missing" && !Logic.repaired) { Logic.repaired = true; repairUT(); return; }
+  }
+  else if (d.type === "exit") {
+    Logic.id = null;
+    if (!["error", "needs-ut", "unsupported"].includes(Logic.state)) { Logic.state = "error"; Logic.detail = d.tail || `It stopped unexpectedly (code ${d.code}).`; }
+  }
+  renderLogicBar(); refreshChecksView();
+}
+function refreshChecksView(){ if (UI.tab === "checks") renderChecks(); else renderLogicBar(); }
+async function repairUT(){
+  Logic.state = "starting"; renderLogicBar();
+  try { await window.apvic.logicInstallUT(); }
+  catch (e) { Logic.state = "needs-ut"; Logic.detail = e.message; renderLogicBar(); return; }
+  startLogic(true);
+}
+async function chooseLogicYaml(){
+  let p; try { p = await window.apvic.logicChooseYaml(); } catch (e) { toast(e.message); return; }
+  if (!p) return;
+  store.set("apwc.logicYaml." + roomKey(), p);
+  startLogic(true);
+}
+function renderLogicBar(){
+  const bar = $("#logicBar"); if (!bar) return;
+  $("#chkLogicWrap")?.classList.toggle("hidden", Logic.state !== "ready");
+  if (!logicInApp() || !S.slot || UI.chkMode !== "missing" || !S.missing.size) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const btn = (label, fn, primary) => h("button", { class: "btn small" + (primary ? " primary" : ""), type: "button", onclick: fn }, label);
+  const off = () => { store.set("apwc.logic", false); stopLogic(); UI.chkLogic = false; $("#chkLogic").checked = false; renderChecks(); };
+  let kids;
+  if (Logic.state === "off") kids = [h("span", { class: "grow" }, "See which of your remaining checks you can reach right now."), btn("Turn on", () => { store.set("apwc.logic", true); startLogic(true); }, true)];
+  else if (Logic.state === "needs-ut") kids = [h("span", { class: "logic-dot bad", "aria-hidden": "true" }),
+      h("span", { class: "grow" }, h("b", null, "Couldn't load the tracker. "), "The Universal Tracker in your custom_worlds folder doesn't work with this version of Archipelago, and replacing it with the built-in one didn't help.",
+        Logic.detail ? h("details", { class: "logic-details" }, h("summary", null, "Details"), h("pre", { class: "mono" }, Logic.detail.slice(-3000))) : null),
+      btn("Repair", () => { Logic.repaired = true; repairUT(); }, true), btn("Turn off", off)];
+  else if (["starting", "generating", "connecting"].includes(Logic.state)) kids = [h("span", { class: "spin", "aria-hidden": "true" }),
+      h("span", { class: "grow" }, Logic.state === "connecting" ? "Checking what you can reach…" : "Working out your world's logic… Big games can take a minute.")];
+  else if (Logic.state === "ready") {
+    const left = [...S.missing], n = left.filter(id => Logic.inLogic.has(id)).length, g = left.filter(id => Logic.glitched.has(id)).length;
+    kids = [h("span", { class: "logic-dot ok", "aria-hidden": "true" }),
+      h("span", { class: "grow" }, h("b", null, `${n} of ${left.length}`), " remaining checks are reachable with what you have", g ? ` · ${g} more with glitches` : "", "."),
+      h("span", { class: "muted small-note", title: "Built into ArchipelagoVic. Universal Tracker is by FarisTheAncient (MIT license)." }, "Logic by Universal Tracker"), btn("Turn off", off)];
+  }
+  else if (Logic.state === "unsupported") kids = [h("span", { class: "grow" }, `The ${gameOf(S.slot)} world asks trackers not to work out its logic, so every check is shown.`), btn("Turn off", off)];
+  else {
+    const details = [Logic.detail, ...Logic.notes, ...Logic.log].filter(Boolean).join("\n").slice(-3000);
+    kids = [h("span", { class: "logic-dot bad", "aria-hidden": "true" }),
+      h("span", { class: "grow" }, h("b", null, "Couldn't work out what you can reach. "),
+        !Logic.yaml ? `There's no YAML named ${S.slotName} in your Players folder. Most games need the YAML you made for this slot, so choose it.`
+                    : `Using ${Logic.yaml.file.split(/[\\/]/).pop()}. Universal Tracker couldn't build ${gameOf(S.slot)} from it.`,
+        details ? h("details", { class: "logic-details" }, h("summary", null, "Details"), h("pre", { class: "mono" }, details)) : null),
+      btn("Choose YAML…", chooseLogicYaml, !Logic.yaml), btn("Try again", () => startLogic(true)), btn("Turn off", off)];
+  }
+  bar.className = "logic-bar" + (Logic.state === "ready" ? " ok" : Logic.state === "error" ? " bad" : "");
+  bar.replaceChildren(...kids.filter(Boolean));
+}
+
 function stopTracker(){ clearInterval(Track.timer); Object.assign(Track, { base:null, roomId:null, tracker:null, totals:new Map(), players:new Map(), at:0, timer:null, error:null }); }
 function agoText(t){
   if (!t) return "—";
@@ -1087,6 +1199,7 @@ function resetSession(){
   Object.assign(S, {room:null, team:0, slot:0, checked:new Set(), missing:new Set(), hintPoints:0, received:[], hints:[], feed:[], scouted:new Map(), status:new Map(), online:new Set(), everConnected:false, retry:0, unread:0});
   S.players.clear(); UI.feedPlayer = null;
   stopTracker();
+  stopLogic();
   $("#scoutBtn").textContent = "Reveal contents"; $("#scoutBtn").disabled = false;
 }
 
@@ -1148,6 +1261,9 @@ if (CLIENT_UI) {
   UI.recvFrom = store.get("apwc.recvFrom", "all"); $("#recvFrom").value = UI.recvFrom;
   $("#recvCat").addEventListener("change", e => { UI.recvCat = e.target.checked; store.set("apwc.recvCat", UI.recvCat); renderReceived(); });
   $("#chkCat").addEventListener("change", e => { UI.chkCat = e.target.checked; store.set("apwc.chkCat", UI.chkCat); renderChecks(); });
+  UI.chkLogic = store.get("apwc.chkLogic", false); $("#chkLogic").checked = UI.chkLogic;
+  $("#chkLogic").addEventListener("change", e => { UI.chkLogic = e.target.checked; store.set("apwc.chkLogic", UI.chkLogic); renderChecks(); });
+  window.apvic?.onLogicData?.(onLogicData);
   $("#waitingStat").addEventListener("click", () => { UI.hintHideFound = true; $("#hintHideFound").checked = true; selectTab("hints"); });
   $("#alertsBtn").addEventListener("click", openAlerts);
   $("#recapBtn").addEventListener("click", () => openRecap(false));

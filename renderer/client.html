@@ -173,7 +173,9 @@
           </div>
           <input class="input search" id="chkSearch" type="search" placeholder="Search locations" style="max-width:240px">
           <label class="check"><input type="checkbox" id="chkCat"> Group by area</label>
+          <label class="check hidden" id="chkLogicWrap" title="Hide checks you can't reach yet with the items you have"><input type="checkbox" id="chkLogic"> Only what I can reach</label>
         </div>
+        <div class="logic-bar hidden" id="logicBar" role="status" aria-live="polite"></div>
         <div class="spoiler" id="scoutBar">
           <span style="flex:1;min-width:220px">Want to see which item sits behind each remaining check and who it's for? This reveals the contents of your own world.</span>
           <button class="btn" id="scoutBtn">Reveal contents</button>

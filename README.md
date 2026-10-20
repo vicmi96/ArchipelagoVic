@@ -34,6 +34,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **Readable activity feed.** Every line says who found what for whom and where ("Vic → Bob · Fishing Journal, at Tile 2 in Vic's world"). Items found in your own world are labelled as yours.
 - **Colours that mean something.** ★ gold for key items someone needs to progress, ▲ blue for useful, ✖ red for traps, ● grey for filler. A colour guide sits right next to the feed.
 - **Received, Checks left, Hints and Players tabs**, with search, filters by player, and "key items only".
+- **What you can reach right now.** Checks left marks every remaining check as *Reachable*, *Glitched* or *Not yet*, based on the items you have, and "Only what I can reach" hides the rest. It's built in, so there's nothing to install: ArchipelagoVic carries [Universal Tracker](https://github.com/FarisTheAncient/Archipelago/releases)'s logic engine, sets it up the first time, and runs it in the background.
 - **"Key items still out there."** Your hinted key items that haven't been found yet, front and centre.
 - **Alerts** (sound, flashing taskbar, desktop notification) when a key item arrives or someone hints for something in your world.
 - **History survives reconnects.** Everything you've seen in a room is kept and shown again when you rejoin.
@@ -92,6 +93,7 @@ Windows SmartScreen may warn the first time because the installer isn't code-sig
 | **Settings** | Archipelago folder, `host.yaml` (a backup is kept), tray behaviour, `archipelago://` links, game pictures, SteamGridDB key, alerts and theme. |
 
 **Tips**
+- **Reachable checks** work out of the box. Most games need the YAML you made for your slot. ArchipelagoVic looks in your Players folder for one with your slot name; if it isn't there, use "Choose YAML…".
 - Click any game's name or icon for its summary: cover, genre, developer, release date and links. Right-click an icon to use your own picture.
 - Games that aren't on Steam (Zelda, Pokémon…) need a free [SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api) for their icon. Add it under Settings.
 - Just want the text client in a browser? Open `ArchipelagoClient.html`. It needs no install, but it can't host, generate, launch anything or use room links.
@@ -130,6 +132,7 @@ npm start
 - **"Archipelago not found".** Settings → Change folder, then pick the folder that contains `ArchipelagoLauncher.exe`.
 - **Can't connect to an archipelago.gg room.** Rooms go to sleep after a while. Paste the room link instead of the address, and ArchipelagoVic wakes the room and finds its new port.
 - **Hosting online says a game isn't supported.** archipelago.gg can only generate games that ship with Archipelago. Generate and host games from custom `.apworld` files on your PC.
+- **"Couldn't work out what you can reach".** Usually the YAML is missing or doesn't match the game you're playing. Use "Choose YAML…" and pick the YAML you made for that slot. "Details" shows Universal Tracker's own message. A few game worlds ask trackers not to work out their logic, and ArchipelagoVic respects that.
 - **Where's my data?** Settings, saved rooms, history and game pictures are in `%APPDATA%\ArchipelagoVic`.
 
 ## Project layout
@@ -140,6 +143,9 @@ preload.js              The fixed set of actions the window may ask the main pro
 aplib.js                Zip, APWorld and patch handling; game icons, covers and summaries
 components.json         Every Archipelago Launcher component and how ArchipelagoVic runs it
 game-art.json           Where each game's picture comes from (Steam app or Wikipedia article)
+logic/apvic_logic/      Small Archipelago add-on that runs Universal Tracker's logic without its window
+logic/universal-tracker/  Built-in copy of Universal Tracker (tracker.apworld) and its MIT license
+                        (installed into custom_worlds as apvic_logic.apworld when needed)
 renderer/
   index.html, launcher.js   Main window: Home, Play tabs, Host, Generate, Worlds, Tools, Settings
   client.html, client.js    One room (the text client); also the browser-only client
@@ -156,4 +162,4 @@ docs/screenshots/           Images used in this README
 
 [MIT](LICENSE) © 2026 Victória Miranda.
 
-Archipelago is © its contributors and released under the MIT License. Game names, icons and cover art belong to their respective owners and are downloaded to your PC only for display.
+Archipelago is © its contributors and released under the MIT License. The built-in [Universal Tracker](https://github.com/FarisTheAncient/Archipelago) is by FarisTheAncient and contributors, also MIT (see `logic/universal-tracker/LICENSE.txt`). Game names, icons and cover art belong to their respective owners and are downloaded to your PC only for display.

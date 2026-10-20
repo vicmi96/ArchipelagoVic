@@ -1,7 +1,7 @@
 {
   "name": "archipelagovic",
   "productName": "ArchipelagoVic",
-  "version": "2.3.1",
+  "version": "2.4.1",
   "description": "Archipelago launcher and text client in one window",
   "main": "main.js",
   "author": "Vic",
@@ -24,7 +24,8 @@
       "aplib.js",
       "components.json",
       "game-art.json",
-      "renderer/**/*"
+      "renderer/**/*",
+      "logic/**/*"
     ],
     "directories": {
       "output": "dist"
