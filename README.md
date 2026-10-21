@@ -48,7 +48,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
 - **Quit** at the bottom of the sidebar (or Ctrl+Q) really closes ArchipelagoVic. If you're in a room or hosting a server, it asks first.
 
 **One-click Play for BizHawk games** (Pokémon Red and Blue, and other games the BizHawk Client plays)
-- **Set a game up once** in the BizHawk tab: where EmuHawk.exe is and your original ROM. ArchipelagoVic checks every path and the ROM's MD5. If the ROM is wrong, it says why in plain words (another version or region, already patched, a hack or a bad dump) and what to do.
+- **Set a game up once** in the BizHawk tab: where EmuHawk.exe is and your original ROM. There's no game name to type: ArchipelagoVic reads it from the ROM or the patch file (for example "Pokemon Red and Blue · Pokémon Red (US/Europe)"). It checks every path and the ROM's MD5. If the ROM is wrong, it says why in plain words (another version or region, already patched, a hack or a bad dump) and what to do.
 - **Press Play** and choose the room (address or archipelago.gg room link, the last one is filled in) and this game's patch file. ArchipelagoVic then:
   1. checks the room is running;
   2. patches your ROM (skipped when it's already done);

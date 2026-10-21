@@ -766,10 +766,11 @@ function profileCard(p){
     : n ? h("p",{class:"state bad"}, n === 1 ? "1 thing to fix" : `${n} things to fix`, blocked ? " before you can play." : ".")
     : h("p",{class:"state ok"}, p.patch ? "Ready to play." : "Ready. Choose this game's patch file when you press Play.");
   const row = (label, value, problem) => [h("dt",null,label), h("dd",null, value, problem ? h("div",{class:"problem"}, problem) : null)];
+  const game = c?.game || p.game;   // detected from the patch or the ROM
   return h("article",{class:"profile-card", "data-profile": p.id},
-    gameIcon(p.game || "Archipelago", "lg"),
+    gameIcon(game || "Archipelago", "lg"),
     h("div",{class:"grow"},
-      h("h2",null, p.game || "Game not known yet"), state,
+      h("h2",null, game || "Game not known yet"), state,
       h("dl",{class:"kv"},
         row("EmuHawk", p.emuhawk || "Not set", c?.problems.emuhawk),
         row("ROM", c?.rom?.known || fileName(p.rom) || "Not set", c?.problems.rom),
@@ -800,7 +801,7 @@ async function editProfile(p){
     let c; try { c = await API.profileCheck({ ...values(), id: p?.id }); } catch (e) { c = { problems: {}, error: e.message }; }
     if (n !== seq) return;
     for (const [k, x] of Object.entries(f)) { x.note.textContent = c.problems?.[k] || ""; x.input.setAttribute("aria-invalid", c.problems?.[k] ? "true" : "false"); }
-    if (c.game) f.game.input.placeholder = c.game;
+    showGame(c);
     status.className = "small-note " + (c.error || !c.ok ? "problem" : "ok-note");
     status.textContent = c.error || (c.ok ? `Everything checks out${c.rom?.known ? `: ${c.rom.known}` : ""}.` : "Fix the lines in red, or save now and fix them later.");
   };
@@ -808,11 +809,19 @@ async function editProfile(p){
   f.rom = profileField("rom", "Original ROM (not patched)", "The unpatched game, for example Pokemon Red.gb", "rom", p?.rom, check);
   f.patch = profileField("patch", "Patch file (optional)", "You can also choose it each time you play", "patch", p?.patch, check);
   f.server = profileField("server", "Default room (optional)", "archipelago.gg room link, or address:port", null, p?.server, check);
-  f.game = profileField("game", "Game", "Filled in from the ROM or the patch", null, p?.game, check);
+  // The game isn't typed: it's read from the patch file, or from the ROM when ArchipelagoVic knows it.
+  const gameOut = h("output",{class:"detected", id:"pf-game", "aria-live":"polite"});
+  function showGame(c){
+    if (c?.game) gameOut.replaceChildren(gameIcon(c.game), h("b",null, c.game), c.rom?.known ? h("span",{class:"muted"}, ` · ${c.rom.known}`) : null);
+    else gameOut.replaceChildren(h("span",{class:"muted"}, "Found automatically from your ROM or patch file."));
+  }
+  showGame(p?.game ? { game: p.game } : null);
   const body = h("div",{class:"profile-form"},
     f.emuhawk.el,
     h("p",{class:"muted small-note", style:"margin:-4px 0 4px"}, "No BizHawk yet? Download it from ", h("a",{href:"https://tasvideos.org/BizHawk", "data-ext":true}, "tasvideos.org/BizHawk"), " and unpack it anywhere."),
-    f.rom.el, f.patch.el, f.server.el, f.game.el, status);
+    f.rom.el, f.patch.el, f.server.el,
+    h("div",{class:"field"}, h("label",{for:"pf-game"}, "Game"), gameOut),
+    status);
   const done = sheet(p ? `Edit ${p.game || "game"}` : "Add a game", body, [{label:"Cancel", value:""}, {label:"Save", value:"save", primary:true}]);
   if (p) check();
   if (await done !== "save") return;
@@ -869,9 +878,10 @@ function openPlay(p){
       playBtn.textContent = "Try again";
     } finally { running = false; playBtn.disabled = closeBtn.disabled = false; inputs.forEach(i => i.disabled = false); }
   });
-  $("#sheetTitle").textContent = `Play ${p.game || ""}`.trim();
+  const game = G.checks[p.id]?.game || p.game;
+  $("#sheetTitle").textContent = `Play ${game || ""}`.trim();
   $("#sheetBody").replaceChildren(h("div",{class:"play-sheet"},
-    h("div",{class:"sheet-head"}, coverImg(p.game || "Archipelago", "xl"), h("div",null, h("b",null, p.game || "Game"), h("div",{class:"muted"}, "Patches your ROM, starts EmuHawk and the BizHawk Client, then joins the room."))),
+    h("div",{class:"sheet-head"}, coverImg(game || "Archipelago", "xl"), h("div",null, h("b",null, game || "Game"), h("div",{class:"muted"}, "Patches your ROM, starts EmuHawk and the BizHawk Client, then joins the room."))),
     h("div",{class:"field"}, h("label",{for:"pl-server"}, "Room"), server),
     h("div",{class:"field"}, h("label",{for:"pl-patch"}, "Patch file"), h("div",{class:"row-input", style:"margin-top:0"}, patch, browse)),
     h("details",{class:"more"}, h("summary",null,"Room password"), h("div",{class:"field"}, h("label",{for:"pl-pass"}, "Password"), pass)),

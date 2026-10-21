@@ -714,7 +714,13 @@ function registerIpc() {
 
   // ---- game profiles ----
   handle("profile:list", async () => profileList());
-  handle("profile:check", async (x) => checkProfile(normalizeProfile(typeof x === "string" ? { id: x } : x)));
+  handle("profile:check", async (x) => {
+    const c = await checkProfile(normalizeProfile(typeof x === "string" ? { id: x } : x));
+    // A saved profile whose game name was typed by hand in an older version takes the detected name.
+    const i = typeof x === "string" ? profileList().findIndex(p => p.id === x) : -1;
+    if (i >= 0 && c.game && config.profiles[i].game !== c.game) { config.profiles[i] = { ...config.profiles[i], game: c.game }; saveConfig(); }
+    return c;
+  });
   handle("profile:save", async (x) => saveProfile(x || {}));
   handle("profile:remove", async (id) => { config.profiles = profileList().filter(p => p.id !== id); saveConfig(); return true; });
   handle("play:start", async function (opts = {}) {
@@ -965,7 +971,8 @@ function serverProblem(s) {
 // emuhawk, rom, patch, server. Also reports the ROM's facts, the patch, the hashes it needs and its host.yaml setting.
 async function checkProfile(p) {
   const problems = {};
-  const out = { problems, game: p.game || null, rom: null, patch: null, expected: [], romSetting: null };
+  // The game is never typed: it comes from the patch, or from a ROM we know. A stored name is only the last fallback.
+  const out = { problems, game: null, rom: null, patch: null, expected: [], romSetting: null };
   const isFile = f => { try { return fs.statSync(f).isFile(); } catch { return false; } };
 
   if (!p.emuhawk) problems.emuhawk = "Choose EmuHawk.exe. If BizHawk isn't installed yet, download it from tasvideos.org/BizHawk and unpack it anywhere.";
@@ -980,9 +987,8 @@ async function checkProfile(p) {
     else {
       try {
         out.patch = aplib.inspectPatch(p.patch);
-        out.game = out.game || out.patch.game;
-        if (p.game && out.patch.game && out.patch.game !== p.game) problems.patch = `This patch is for ${out.patch.game}, but this profile is for ${p.game}. Choose a ${p.game} patch, or make a profile for ${out.patch.game}.`;
-        else if (!BIZHAWK_SUFFIXES.has(out.patch.suffix)) {
+        out.game = out.patch.game || null;   // a patch for another game is caught by the ROM check below (its checksum won't match)
+        if (!BIZHAWK_SUFFIXES.has(out.patch.suffix)) {
           const m = await inspect();
           if (m.type !== "inspect") problems.patch = m.code === "no-handler" ? `Your Archipelago install has no game that uses ${out.patch.suffix} patch files. Install the game's .apworld first.` : `Archipelago couldn't read this patch: ${m.text}`;
         }
@@ -1003,6 +1009,7 @@ async function checkProfile(p) {
       out.game = out.game || aplib.KNOWN_ROMS[facts.md5]?.game || null;   // a ROM we know names its game
     } catch (e) { problems.rom = `Couldn't read the ROM: ${e.message}`; }
   }
+  out.game = out.game || p.game || null;
 
   // Which original ROM(s) are needed: the patch says (base_checksum); otherwise ask Archipelago; without a patch, the ROMs we know for this game.
   if (out.patch && !problems.patch) {
@@ -1043,7 +1050,7 @@ function normalizeProfile(x = {}) {
 async function saveProfile(x) {
   const p = normalizeProfile(x);
   const check = await checkProfile(p);
-  if (!p.game && check.game) p.game = check.game;
+  if (check.game) p.game = check.game;   // also corrects a name typed by hand in older versions
   const changes = [];
   if (p.emuhawk && !check.problems.emuhawk) changes.push({ section: "bizhawkclient_options", key: "emuhawk_path", value: p.emuhawk });
   if (check.romSetting) changes.push({ ...check.romSetting, value: p.rom });
