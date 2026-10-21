@@ -128,7 +128,7 @@ function renderThemePicker(box, onPick){
     box.append(h("h4", { class: "theme-group" }, group));
     const grid = h("div", { class: "theme-grid", role: "radiogroup", "aria-label": group });
     for (const t of THEMES.filter(x => x.group === group)) {
-      const c = t.c || { paper: "#EDF1EF", surface: "#F8FAF9", line: "#C9D3D0", ink: "#16252D", ink3: "#73868B", sea: "#2C6676", brass: "#C08A1E" };
+      const c = t.c || { paper: "#EDF1EF", surface: "#F8FAF9", line: "#C9D3D0", ink: "#16252D", ink3: "#5E7076", sea: "#2C6676", brass: "#C08A1E" };
       const card = h("button", { type: "button", class: "theme-card" + (t.id === cur ? " on" : ""), role: "radio", "aria-checked": String(t.id === cur), title: t.series ? `Colours inspired by ${t.series}` : t.desc,
           onclick: () => { setThemeId(t.id); onPick?.(t); renderThemePicker(box, onPick); } },
         h("span", { class: "theme-prev", style: `background:${c.paper}${t.backdrop ? ";background-image:" + t.backdrop : ""};border-color:${c.line}` },

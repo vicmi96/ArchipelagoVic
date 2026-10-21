@@ -1212,7 +1212,7 @@ async function selfCheck() {
     return Object.assign(out, { latest, newer: behind > 0, behind, ahead, dirty, branch, upstream, notes: log.map(l => "• " + l).join("\n") });
   }
   const rel = await releaseJson(`/repos/${APP_REPO}/releases/latest`);
-  if (!rel) { out.note = "ArchipelagoVic has no releases on GitHub yet."; return out; }
+  if (!rel) { out.note = "No ArchipelagoVic release is published on GitHub yet, so this copy has nothing to update to."; return out; }
   const latest = String(rel.tag_name || "").replace(/^v/i, "");
   const newer = aplib.cmpVersion(aplib.parseVersion(latest) || [0], aplib.parseVersion(current) || [0]) > 0;
   const want = kind === "portable" ? /portable\.exe$/i : /setup.*\.exe$/i;

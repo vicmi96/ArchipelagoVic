@@ -106,7 +106,7 @@ Windows SmartScreen may warn the first time because the installer isn't code-sig
 
 | Section | What it's for |
 |---|---|
-| **Home** | Common tasks, recent rooms, what's running, updates, community links. Drop a patch file, `.apworld` or YAML anywhere on the window. |
+| **Home** | Right now (your rooms, the server, updates), common tasks as tiles, recent rooms, community links. Drop a patch file, `.apworld` or YAML anywhere on the window. |
 | **Play** | The text client, one tab per room. Type a server address (`archipelago.gg:38281`) or paste a room link, enter your slot name, then Connect. |
 | **BizHawk** | One-click Play for BizHawk games: add a game once (EmuHawk.exe and your original ROM), then Play patches, starts EmuHawk and the BizHawk Client, and joins the room. |
 | **Host** | Runs `ArchipelagoServer.exe` on a generated game. "Join this game" connects you to it. |
@@ -189,6 +189,7 @@ Installed and portable copies find the new release by themselves; copies run fro
   - **EmuHawk isn't set to run in the background.** Tick Config → Customize → "Run in background". Without it EmuHawk pauses when you click another window, and the BizHawk Client loses it ("Connection timed out").
   - **The game is still on its title screen.** Checks are only sent once you're in the game (Pokémon: after New Game or Continue).
   - **The BizHawk Client window was closed.** It's Archipelago's own program and the bridge between EmuHawk and the room, so keep it open while you play.
+- **An installed or portable copy says it has nothing to update to.** Those copies only update from GitHub **Releases**, not from commits pushed to `main`. Publish a release (see "Publishing an update" above), then use Home → Updates → Check now.
 - **Where's my data?** Settings, saved rooms, history, game pictures and game profiles are in `%APPDATA%\ArchipelagoVic`.
 
 ## Project layout

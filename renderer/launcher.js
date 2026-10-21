@@ -224,53 +224,86 @@ async function launch(name, args){
 }
 
 /* ---------- Home ---------- */
+// One "Right now" card: a status line (tone ok | off | new | busy, or none), its contents, then its actions.
+function nowCard(box, tone, title, body, ...acts){
+  box.replaceChildren(h("div",{class:"now-state" + (tone ? " " + tone : "")}, h("i",{"aria-hidden":"true"}), title),
+    ...body.filter(Boolean), ...(acts.some(Boolean) ? [h("div",{class:"now-acts"}, ...acts)] : []));
+}
 function renderHome(){
+  // Right now: your rooms, the server (or the generator), and updates (renderUpdates).
+  const live = connectedRooms();
+  const openRoom = r => { showView("play"); selectRoom(r.id); };
+  if (live.length) nowCard($("#homeRooms"), "ok", `${live.length} room${live.length === 1 ? "" : "s"} connected`,
+    [h("ul",{class:"now-list"}, live.slice(0, 3).map(r => h("li",null, gameIcon(r.status.game, "lg"),
+      h("span",{class:"grow"}, h("b",null, r.status.name), h("span",{class:"now-sub"}, [r.status.game, r.status.server].filter(Boolean).join(" · "))),
+      h("button",{class:"btn small" + (live.length === 1 ? " primary" : ""), type:"button", onclick:() => openRoom(r)}, "Open"))))],
+    live.length > 3 ? h("button",{class:"linkish", type:"button", onclick:() => showView("play")}, `See all ${live.length} rooms`) : null);
+  else nowCard($("#homeRooms"), "off", "No room connected", [h("p",null, "Join a room to follow items, hints and chat.")],
+    h("button",{class:"btn primary", type:"button", onclick:() => showView("play")}, "Join a game"));
+
+  const found = !!L.info?.found;
+  if (L.server.id || L.gen.id) nowCard($("#homeServer"), L.server.id ? "ok" : "busy", L.server.id ? "Server running" : "Generating",
+    [L.server.id ? h("p",null, "Hosting on port ", h("b",null, L.server.port || "38281"), ". Friends connect to this PC's address and that port.") : null,
+     L.gen.id ? h("p",null, "Generating a multiworld…") : null],
+    L.server.id ? h("button",{class:"btn small", type:"button", onclick:() => showView("host")}, "Open server") : null,
+    L.gen.id ? h("button",{class:"btn small", type:"button", onclick:() => showView("generate")}, "Open generator") : null);
+  else nowCard($("#homeServer"), "off", "Server off", [h("p",null, "Nothing is hosted on this PC. Host a generated multiworld so friends can connect.")],
+    h("button",{class:"btn", type:"button", disabled:!found, title:found ? null : "Needs your Archipelago install", onclick:() => showView("host")}, "Host a game"));
+
   const ul = $("#homeRecent"); ul.replaceChildren();
   const rec = store.get("apwc.recent", []);
   if (!rec.length) ul.append(h("li",{class:"muted"},"Rooms you join show up here."));
   for (const r of rec.slice(0, 6)){
-    ul.append(h("li",null, r.game ? gameIcon(r.game) : null, h("span",{class:"grow"}, h("b",null,r.slot), " on ", r.server, r.game ? h("span",{class:"muted"}," · "+r.game) : null),
-      h("button",{class:"btn small", onclick:() => joinRoom({ server: r.server, slot: r.slot, room: r.room || null })}, "Join")));
+    const on = live.find(x => x.status.server === r.server && x.status.name === r.slot);
+    ul.append(h("li",null, r.game ? gameIcon(r.game) : null,
+      h("span",{class:"grow"}, h("b",null,r.slot), r.game ? h("span",{class:"muted"}," · "+r.game) : null),
+      h("span",{class:"addr"}, r.server), on ? h("span",{class:"on"}, "Connected") : null,
+      h("button",{class:"btn small", type:"button", onclick:() => on ? openRoom(on) : joinRoom({ server: r.server, slot: r.slot, room: r.room || null })}, on ? "Open" : "Join")));
   }
-  const run = $("#homeRunning"); run.replaceChildren();
-  for (const r of connectedRooms()) run.append(h("li",null, gameIcon(r.status.game), h("span",{class:"grow"}, "Playing as ", h("b",null,r.status.name), " on ", r.status.server), h("button",{class:"btn small", onclick:() => { showView("play"); selectRoom(r.id); }},"Open")));
-  if (L.server.id) run.append(h("li",null, h("span",{class:"grow"}, "Server on port ", h("b",null, L.server.port || "38281")), h("button",{class:"btn small", onclick:() => showView("host")},"Open")));
-  if (L.gen.id) run.append(h("li",null, h("span",{class:"grow"}, "Generating a multiworld…"), h("button",{class:"btn small", onclick:() => showView("generate")},"Open")));
-  if (!run.children.length) run.append(h("li",{class:"muted"},"Nothing running."));
 }
 
 /* ---------- updates ---------- */
 async function refreshUpdates(force){
   const box = $("#homeUpdates");
   if (!L.info?.found){ renderUpdates(); return; }
-  if (force) box.replaceChildren(h("li",{class:"muted"},"Checking…"));
+  if (force) nowCard(box, null, "Updates", [h("p",{class:"muted"},"Checking…")]);
   try { L.updates = await API.checkUpdates(!!force); L.updatesError = null; } catch (e) { L.updatesError = "Couldn't check: " + e.message; }
   renderUpdates();
   if (L.view === "worlds") refreshWorlds();
 }
-// Home → Updates: ArchipelagoVic itself first, then Archipelago and your custom worlds.
+// Home → Updates card: what's new (ArchipelagoVic itself first, then Archipelago and your custom worlds),
+// then why something couldn't be checked, the versions, and Check now.
 function renderUpdates(){
   const box = $("#homeUpdates");
   const u = L.updates || { worlds: [] };
-  const rows = [];
+  const rows = [], notes = [];
   const s = L.self;
   if (s?.newer) rows.push(h("li",null, h("img",{class:"gicon", src:"icon.png", alt:""}),
     h("span",{class:"grow"}, h("b",null, `ArchipelagoVic ${s.latest}`), s.kind === "git" ? ` · ${s.behind} new change${s.behind === 1 ? "" : "s"} on GitHub.` : ` is out (you have ${s.current}).`),
     (s.kind === "git" || s.asset) ? h("button",{class:"btn small primary", type:"button", onclick:() => openSelfUpdate(s)}, "Update…") : h("a",{class:"btn small", href:s.url || `https://github.com/${s.repo}/releases`, "data-ext":""}, "Get it")));
-  if (L.updatesError) rows.push(h("li",{class:"muted"}, L.updatesError));
+  // Why ArchipelagoVic couldn't look for an update (for example: no releases on GitHub yet). Never hidden behind "up to date".
+  const selfNote = !s?.newer && s?.note && !s.skipped ? s.note : null;
+  if (L.updatesError) notes.push(L.updatesError);
   if (u.archipelago?.newer) rows.push(h("li",null, gameIcon("Archipelago"), h("span",{class:"grow"}, h("b",null,`Archipelago ${u.archipelago.latest}`), ` is out (you have ${u.archipelago.current}).`),
     h("a",{class:"btn small", href:u.archipelago.url, "data-ext":""}, "Get it")));
   for (const w of u.worlds.filter(x => x.newer)) rows.push(h("li",null, gameIcon(w.game || w.module), h("span",{class:"grow"}, h("b",null, w.game || w.module), ` ${w.tag} is out.`),
     h("button",{class:"btn small primary", type:"button", onclick:() => updateWorld(w)}, "Update")));
   const checked = u.checked || s?.checked;
   const when = checked ? new Date(checked).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) : null;
-  if (u.errors?.length) rows.push(h("li",{class:"muted"}, u.errors[0]));
-  else if (L.selfError) rows.push(h("li",{class:"muted"}, L.selfError));
-  else if (!rows.length) rows.push(h("li",{class:"muted"}, when ? `Everything is up to date. Checked ${when}.` : "Not checked yet."));
+  if (u.errors?.length) notes.push(u.errors[0]);
+  if (L.selfError) notes.push(L.selfError);
+  else if (selfNote) notes.push(selfNote);
+  const body = [];
+  if (rows.length) body.push(h("ul",{class:"now-list"}, rows));
+  else if (!notes.length) body.push(h("p",null, when ? "Everything is up to date." : "Not checked yet."));
+  else if (!u.errors?.length && !L.updatesError && when && L.info?.found) body.push(h("p",null, "Archipelago and your worlds are up to date."));
+  for (const n of notes) body.push(h("p",{class:"muted"}, n));
   const ver = [s?.current || u.app ? `ArchipelagoVic ${s?.current || u.app}` : null, u.archipelago ? `Archipelago ${u.archipelago.current}` : L.info?.version ? `Archipelago ${L.info.version}` : null].filter(Boolean).join(" · ");
-  if (ver) rows.push(h("li",{class:"muted small-note"}, ver));
-  rows.push(h("li",null, h("button",{class:"linkish", type:"button", onclick:() => { refreshSelf(true); refreshUpdates(true); }}, "Check now")));
-  box.replaceChildren(...rows);
+  if (ver) body.push(h("p",{class:"muted"}, ver));
+  const problem = L.updatesError || u.errors?.length || L.selfError;
+  nowCard(box, rows.length ? "new" : problem ? "busy" : null, rows.length ? `${rows.length} update${rows.length === 1 ? "" : "s"} available` : "Updates", body,
+    h("button",{class:"btn small", type:"button", onclick:() => { refreshSelf(true); refreshUpdates(true); }}, "Check now"),
+    when ? h("span",null, `Checked ${when}`) : null);
 }
 
 /* ---------- ArchipelagoVic's own updates ---------- */
