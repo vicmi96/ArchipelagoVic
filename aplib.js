@@ -155,7 +155,7 @@ function romMismatch(file, facts, wanted, game) {
   if (other && other.game === game) why = `This is the ${other.name} ROM, but this patch needs ${need}. Choose your ${need} ROM, or use a patch made for ${other.name.replace(/ \(.*\)$/, "")}.`;
   else if (other) why = `This is the ${other.name} ROM, which is for ${other.game}, not ${game || "this game"}. Choose ${need} instead.`;
   else if (/^AP_\d+_P\d+/i.test(base) || hasPatchNextTo(file))
-    why = `${base} looks like a game Archipelago already patched. Patching needs the original, unpatched ROM. Choose your ${need} ROM instead.`;
+    why = `${base} looks like a game Archipelago already patched, from a different patch file. To play ${base} as it is, clear the patch file. To play this patch, choose your ${need} ROM instead: patching needs the original, unpatched ROM.`;
   else {
     const w = wanted.find(x => x.title);
     if (w && facts.title && facts.title !== w.title) why = `Its cartridge title is "${facts.title}", not "${w.title}", so it's a different game, a fan hack or a changed copy, not ${need}.`;
@@ -165,11 +165,16 @@ function romMismatch(file, facts, wanted, game) {
   }
   return `${why} (Expected MD5 ${wanted.map(x => x.md5).join(" or ")}; this file's is ${facts.md5}.)`;
 }
-// True when an Archipelago patch file with the same name sits next to this ROM (it's that patch's output).
-function hasPatchNextTo(file) {
-  const stem = path.basename(file).replace(/\.[^.]+$/, "").toLowerCase();
-  try { return fs.readdirSync(path.dirname(file)).some(n => /\.ap[a-z0-9]+$/i.test(n) && !/\.apworld$/i.test(n) && n.replace(/\.[^.]+$/, "").toLowerCase() === stem); } catch { return false; }
+// A file's name without its folder and ending, in lower case: a patched game has the same stem as its patch.
+const fileStem = file => path.basename(String(file)).replace(/\.[^.]+$/, "").toLowerCase();
+// The Archipelago patch file with the same name next to this ROM (the ROM is that patch's output), or null.
+function patchNextTo(file) {
+  try {
+    const n = fs.readdirSync(path.dirname(file)).find(n => /\.ap[a-z0-9]+$/i.test(n) && !/\.apworld$/i.test(n) && fileStem(n) === fileStem(file));
+    return n ? path.join(path.dirname(file), n) : null;
+  } catch { return null; }
 }
+const hasPatchNextTo = file => !!patchNextTo(file);
 
 /* ================= host.yaml ================= */
 // Change a few "section: key: value" settings in a YAML text such as host.yaml and leave every other
@@ -521,4 +526,4 @@ function createArt({ dir, net, apBase, online, sgdbKey }) {
   return { resolve, setCustom, resetCustom, retryMissingIcons, source, info };
 }
 
-module.exports = { readZip, writeZip, crc32, inspectApworld, inspectPatch, KNOWN_ROMS, knownRomsFor, romFacts, romMismatch, setYamlKeys, writeYamlKeys, looseWorlds, buildApworld, createArt, parseVersion, cmpVersion };
+module.exports = { readZip, writeZip, crc32, inspectApworld, inspectPatch, KNOWN_ROMS, knownRomsFor, romFacts, romMismatch, fileStem, patchNextTo, setYamlKeys, writeYamlKeys, looseWorlds, buildApworld, createArt, parseVersion, cmpVersion };

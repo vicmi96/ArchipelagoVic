@@ -797,7 +797,7 @@ function profileCard(p){
   const blocked = !!(c && (c.problems.emuhawk || c.problems.rom));
   const state = !c ? h("p",{class:"state"}, h("span",{class:"spin"}), "Checking…")
     : n ? h("p",{class:"state bad"}, n === 1 ? "1 thing to fix" : `${n} things to fix`, blocked ? " before you can play." : ".")
-    : h("p",{class:"state ok"}, p.patch ? "Ready to play." : "Ready. Choose this game's patch file when you press Play.");
+    : h("p",{class:"state ok"}, p.patch ? "Ready to play." : c.asIs ? "Ready to play this ROM as it is. For a new game, choose its patch file when you press Play." : "Ready. Choose this game's patch file when you press Play.");
   const row = (label, value, problem) => [h("dt",null,label), h("dd",null, value, problem ? h("div",{class:"problem"}, problem) : null)];
   const game = c?.game || p.game;   // detected from the patch or the ROM
   return h("article",{class:"profile-card", "data-profile": p.id},
@@ -807,7 +807,7 @@ function profileCard(p){
       h("dl",{class:"kv"},
         row("EmuHawk", p.emuhawk || "Not set", c?.problems.emuhawk),
         row("ROM", c?.rom?.known || fileName(p.rom) || "Not set", c?.problems.rom),
-        row("Patch", p.patch ? fileName(p.patch) + (c?.patch?.playerName ? ` · slot ${c.patch.playerName}` : "") : "Chosen when you play", c?.problems.patch),
+        row("Patch", (p.patch ? fileName(p.patch) : c?.asIs ? "None: the ROM is already patched" : "Chosen when you play") + (c?.slot ? ` · slot ${c.slot}` : ""), c?.problems.patch),
         (p.lastServer || p.server) ? row("Room", p.lastServer || p.server, c?.problems.server) : null)),
     h("div",{class:"acts"},
       h("button",{class:"btn primary", type:"button", disabled: blocked, title: blocked ? "Fix the lines in red first (Edit)" : null, onclick:() => openPlay(p)}, "Play"),
@@ -836,11 +836,11 @@ async function editProfile(p){
     for (const [k, x] of Object.entries(f)) { x.note.textContent = c.problems?.[k] || ""; x.input.setAttribute("aria-invalid", c.problems?.[k] ? "true" : "false"); }
     showGame(c);
     status.className = "small-note " + (c.error || !c.ok ? "problem" : "ok-note");
-    status.textContent = c.error || (c.ok ? `Everything checks out${c.rom?.known ? `: ${c.rom.known}` : ""}.` : "Fix the lines in red, or save now and fix them later.");
+    status.textContent = c.error || (c.ok ? `Everything checks out${c.rom?.known ? `: ${c.rom.known}` : ""}.${c.asIs ? " Play starts this ROM as it is, without patching it." : ""}` : "Fix the lines in red, or save now and fix them later.");
   };
   f.emuhawk = profileField("emuhawk", "EmuHawk.exe (BizHawk)", "C:\\BizHawk\\EmuHawk.exe", "emuhawk", p?.emuhawk, check);
-  f.rom = profileField("rom", "Original ROM (not patched)", "The unpatched game, for example Pokemon Red.gb", "rom", p?.rom, check);
-  f.patch = profileField("patch", "Patch file (optional)", "You can also choose it each time you play", "patch", p?.patch, check);
+  f.rom = profileField("rom", "ROM", "The original game (Pokemon Red.gb), or one Archipelago already patched", "rom", p?.rom, check);
+  f.patch = profileField("patch", "Patch file (optional)", "Leave empty for a ROM that's already patched. You can also choose it each time you play", "patch", p?.patch, check);
   f.server = profileField("server", "Default room (optional)", "archipelago.gg room link, or address:port", null, p?.server, check);
   // The game isn't typed: it's read from the patch file, or from the ROM when ArchipelagoVic knows it.
   const gameOut = h("output",{class:"detected", id:"pf-game", "aria-live":"polite"});
@@ -877,7 +877,7 @@ function openPlay(p){
   const d = $("#sheetDlg");
   if (d.open) return;
   const server = h("input",{class:"input", id:"pl-server", value: p.lastServer || p.server || "", placeholder:"archipelago.gg room link, or address:port", spellcheck:"false", autocomplete:"off"});
-  const patch = h("input",{class:"input mono", id:"pl-patch", value: p.patch || "", placeholder:"This game's .apred / .apblue file", spellcheck:"false", autocomplete:"off"});
+  const patch = h("input",{class:"input mono", id:"pl-patch", value: p.patch || "", placeholder:"This game's .apred / .apblue file, or empty for an already patched ROM", spellcheck:"false", autocomplete:"off"});
   const pass = h("input",{class:"input", id:"pl-pass", type:"password", placeholder:"None", autocomplete:"off"});
   const browse = h("button",{class:"btn small", type:"button", onclick: async () => { const f = await attempt(() => API.profilePick("patch", patch.value)); if (f) patch.value = f; }}, "Browse…");
   const steps = h("ol",{class:"play-steps", "aria-label":"Progress"}, PLAY_STEPS.map(([k, label]) =>
@@ -914,7 +914,7 @@ function openPlay(p){
   const game = G.checks[p.id]?.game || p.game;
   $("#sheetTitle").textContent = `Play ${game || ""}`.trim();
   $("#sheetBody").replaceChildren(h("div",{class:"play-sheet"},
-    h("div",{class:"sheet-head"}, coverImg(game || "Archipelago", "xl"), h("div",null, h("b",null, game || "Game"), h("div",{class:"muted"}, "Patches your ROM, starts EmuHawk and the BizHawk Client, then joins the room."))),
+    h("div",{class:"sheet-head"}, coverImg(game || "Archipelago", "xl"), h("div",null, h("b",null, game || "Game"), h("div",{class:"muted"}, "Patches your ROM if it needs it, starts EmuHawk and the BizHawk Client, then joins the room."))),
     h("div",{class:"field"}, h("label",{for:"pl-server"}, "Room"), server),
     h("div",{class:"field"}, h("label",{for:"pl-patch"}, "Patch file"), h("div",{class:"row-input", style:"margin-top:0"}, patch, browse)),
     h("details",{class:"more"}, h("summary",null,"Room password"), h("div",{class:"field"}, h("label",{for:"pl-pass"}, "Password"), pass)),

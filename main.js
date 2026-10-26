@@ -999,7 +999,7 @@ async function checkProfile(p) {
   }
 
   let facts = null;
-  if (!p.rom) problems.rom = "Choose the original ROM of the game.";
+  if (!p.rom) problems.rom = "Choose the game's ROM: the original, or a game Archipelago already patched.";
   else if (!path.isAbsolute(p.rom) || !isFile(p.rom)) problems.rom = `The ROM isn't at ${p.rom}. Choose where it is now.`;
   else if (/\.(zip|7z|rar)$/i.test(p.rom)) problems.rom = "That's a compressed archive. Unpack the ROM inside it first, then choose the unpacked file.";
   else {
@@ -1007,6 +1007,9 @@ async function checkProfile(p) {
       facts = await cachedRomFacts(p.rom);
       out.rom = { size: facts.size, md5: facts.md5, title: facts.title, known: aplib.KNOWN_ROMS[facts.md5]?.name || null };
       out.game = out.game || aplib.KNOWN_ROMS[facts.md5]?.game || null;   // a ROM we know names its game
+      // With no patch chosen, a ROM may be a game Archipelago already patched. Its patch, if still next to it, names the game and slot.
+      const made = !p.patch && !aplib.KNOWN_ROMS[facts.md5] && aplib.patchNextTo(p.rom);
+      if (made) try { const m = aplib.inspectPatch(made); out.game = out.game || m.game || null; out.slot = m.playerName || null; } catch {}
     } catch (e) { problems.rom = `Couldn't read the ROM: ${e.message}`; }
   }
   out.game = out.game || p.game || null;
@@ -1017,10 +1020,17 @@ async function checkProfile(p) {
     if (!md5) { const m = await inspect(); md5 = m.type === "inspect" ? m.expectedHash : null; }
     if (md5) out.expected = [{ md5, ...(aplib.KNOWN_ROMS[md5] || {}) }];
   } else if (!p.patch) out.expected = aplib.knownRomsFor(out.game);
-  if (facts && out.expected.length && !out.expected.some(w => w.md5 === facts.md5)) problems.rom = aplib.romMismatch(p.rom, facts, out.expected, out.game);
+  // A game Archipelago already patched is played as it is (asIs): the chosen patch's output (it has the patch file's
+  // name), or, with no patch chosen, any ROM that isn't an original we know. Some worlds' players keep only that file.
+  if (facts) {
+    const original = !!aplib.KNOWN_ROMS[facts.md5] || out.expected.some(w => w.md5 === facts.md5);
+    out.asIs = !original && (!p.patch || aplib.fileStem(p.rom) === aplib.fileStem(p.patch));
+    if (!out.asIs && out.expected.length && !out.expected.some(w => w.md5 === facts.md5)) problems.rom = aplib.romMismatch(p.rom, facts, out.expected, out.game);
+  }
+  out.slot = out.patch?.playerName || out.slot || null;
 
-  // Where Archipelago keeps this ROM in host.yaml, so its own tools use the same one.
-  if (out.rom && !problems.rom) {
+  // Where Archipelago keeps this ROM in host.yaml, so its own tools use the same one. Never a patched game.
+  if (out.rom && !problems.rom && !out.asIs) {
     const k = aplib.KNOWN_ROMS[out.rom.md5];
     if (k) out.romSetting = { section: k.section, key: k.key };
     else if (out.patch && !problems.patch) { const m = await inspect(); if (m.type === "inspect" && m.romSection && m.romKey) out.romSetting = { section: m.romSection, key: m.romKey }; }
@@ -1117,21 +1127,24 @@ async function playProfile(opts, progress, started) {
 
   // 2. EmuHawk, the ROM and the patch
   progress("check", "running", "Checking EmuHawk, the ROM and the patch…");
-  if (!p.patch) fail("check", "Choose this game's patch file (.apred, .apblue…). Every generated game has a new one.");
   const check = await checkProfile(p);
   const bad = ["emuhawk", "patch", "rom"].map(k => check.problems[k]).filter(Boolean);
   if (bad.length) fail("check", bad.join(" "));
+  if (!p.patch && !check.asIs) fail("check", `${check.rom.known || path.basename(p.rom)} is an original ROM, so it needs this game's patch file (.apred, .apblue…). Every generated game has a new one.`);
   const lua = path.join(base, "data", "lua", "connector_bizhawk_generic.lua");
   const clientExe = path.join(base, "ArchipelagoBizHawkClient.exe");
   if (!fs.existsSync(lua)) fail("check", "Your Archipelago install has no BizHawk connector script (data\\lua\\connector_bizhawk_generic.lua). Reinstall Archipelago.");
   if (!fs.existsSync(clientExe)) fail("check", "Your Archipelago install has no ArchipelagoBizHawkClient.exe. Reinstall Archipelago.");
-  const slot = check.patch.playerName || "";
-  progress("check", "done", `${check.rom.known || path.basename(p.rom)}, and the ${check.game} patch${slot ? ` for ${slot}` : ""}.`);
+  const slot = check.slot || "";
+  progress("check", "done", check.asIs ? `${path.basename(p.rom)}, already patched${slot ? ` for ${slot}` : ""}.`
+    : `${check.rom.known || path.basename(p.rom)}, and the ${check.game} patch${slot ? ` for ${slot}` : ""}.`);
 
-  // 3. patch, unless the patched game from this patch and this ROM is already there
-  let output = check.patch.resultEnding ? p.patch.replace(/\.[^.\\/]+$/, "") + check.patch.resultEnding : null;
+  // 3. patch, unless the ROM is already a patched game, or the patched game from this patch and this ROM is already there
+  let output = check.asIs ? p.rom : check.patch.resultEnding ? p.patch.replace(/\.[^.\\/]+$/, "") + check.patch.resultEnding : null;
   const prev = output && (config.patched || {})[output];
-  if (prev && fs.existsSync(output) && prev.patch === fileStamp(p.patch) && prev.rom === check.rom.md5 && prev.out === fileStamp(output)) {
+  if (check.asIs) {
+    progress("patch", "done", `Not needed: ${path.basename(output)} is played as it is.`);
+  } else if (prev && fs.existsSync(output) && prev.patch === fileStamp(p.patch) && prev.rom === check.rom.md5 && prev.out === fileStamp(output)) {
     progress("patch", "done", `Already patched: ${path.basename(output)}.`);
   } else {
     progress("patch", "running", "Patching your ROM…");

@@ -57,6 +57,7 @@ ArchipelagoVic replaces the official Archipelago Launcher and its text client. I
   5. opens the room in a Play tab, so you see the activity feed too.
 
   A list shows each step as it happens. If one fails, it says why and closes anything it had started.
+- **Already have the patched game?** Choose that ROM (the `AP_…` file a patch made) and leave the patch file empty: Play starts it as it is. Handy for games whose players keep only the patched ROM.
 - **Uses the room's current port.** The BizHawk Client is started with the room's address instead of the patch file, because a patch remembers the port the room had when it was made, and archipelago.gg rooms get a new port when they restart.
 
 **archipelago.gg rooms**
@@ -182,7 +183,7 @@ Installed and portable copies find the new release by themselves; copies run fro
 - **Can't connect to an archipelago.gg room.** Rooms go to sleep after a while. Paste the room link instead of the address, and ArchipelagoVic wakes the room and finds its new port.
 - **Hosting online says a game isn't supported.** archipelago.gg can only generate games that ship with Archipelago. Generate and host games from custom `.apworld` files on your PC.
 - **"Couldn't work out what you can reach".** Usually the YAML is missing or doesn't match the game you're playing. Use "Choose YAML…" and pick the YAML you made for that slot. "Details" shows Universal Tracker's own message. A few game worlds ask trackers not to work out their logic, and ArchipelagoVic respects that.
-- **The BizHawk tab says the ROM isn't right.** Archipelago patches need the exact original game; the message says what's different. A ROM inside a `.zip` has to be unpacked first. Choose the unpatched ROM, not the `AP_…` file Archipelago made.
+- **The BizHawk tab says the ROM isn't right.** Archipelago patches need the exact original game; the message says what's different. A ROM inside a `.zip` has to be unpacked first. Choose the unpatched ROM, not the `AP_…` file Archipelago made, or clear the patch file to play that `AP_…` file as it is.
 - **The BizHawk tab can't find EmuHawk.** Install BizHawk from [tasvideos.org/BizHawk](https://tasvideos.org/BizHawk) (it's a zip you unpack anywhere), then choose `EmuHawk.exe` in the game's Edit. On a new PC, run BizHawk's prerequisites installer once if EmuHawk closes straight away.
 - **The BizHawk Client doesn't say "Connected".** It connects to EmuHawk through the connector script. In EmuHawk, Tools → Lua Console should list `connector_bizhawk_generic.lua` as running.
 - **Checks don't show up in the feed.** Look for one of these:
